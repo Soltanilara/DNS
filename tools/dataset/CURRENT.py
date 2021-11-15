@@ -2,16 +2,9 @@ import numpy as np
 import math
 import h5py
 from PIL import Image, ImageOps
-from matplotlib import cm
-import matplotlib.pyplot as plt
-from sklearn.cluster import KMeans
-import re
-import json
-import glob, os, os.path, shutil
+import os.path, shutil
 from os import listdir
 from os.path import isfile, join
-from scipy.signal import savgol_filter, lfilter, hilbert
-import statsmodels.api as sm
 import plotly.express as px
 
 def traverse_datasets(hdf_file):
@@ -336,7 +329,7 @@ while again == 1:
                         elif action == 'exit':
                             break
                 elif change == 'a':
-                    addldmrk = input("What landmark would you like to add?\n")
+                    addldmrk = int(input("What landmark would you like to add?\n"))
                     zoomed = px.line(x = range(addldmrk-int(c), addldmrk+int(c)+1), y = [h[find] for find in range(addldmrk-int(c), addldmrk+int(c)+1)])
                     zoomed.add_vline(x = addldmrk, line_color = 'red')
                     zoomed.update_xaxes(nticks=2*int(c))
@@ -374,6 +367,7 @@ while again == 1:
             negpos = negpos_array[0]
             foldercounter = 0
             straightorno = False
+            images.sort()
             for image in images:
                 if iv[counter] == image:
                     counter = counter + 1
