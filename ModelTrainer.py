@@ -21,20 +21,22 @@ ts = time.time()
 np.random.seed(0)
 torch.manual_seed(0)
 
-root_dir = "./"
+# root_dir = "/home/nick/dataset/outside/"
+# root_dir = "/home/nick/dataset/val_from_train/"
+root_dir = "/mnt/data/dataset/av/outside/"
 
 transform = transforms.Compose([
-    transforms.Resize((224,224)),
+    transforms.Resize((224, 224)),
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
 
 
-device = 2  # GPU
+device = 0 if torch.cuda.is_available() else "cpu"  # use GPU if available
 n_epochs = 80
 n_episodes = 16
-batch = 25
-n_way = 2 #positive/negative
+batch = 16  #25
+n_way = 2  #positive/negative
 n_way_val = 2
 n_support = 15
 n_query = 10
@@ -45,8 +47,8 @@ stats_freq = 1
 sch_param_1 = 20
 sch_param_2 = 0.5
 FC_len = 1000
-course_name = 'ASB1F'
-savename = course_name+'_NewMix_SymMah_batch'+str(batch)+'_'+str(n_support)+'-shot_way_train_'+str(n_way)+'_lr_'+str(lr)+'_lrsch_'+str(sch_param_2)+'_'+str(sch_param_1)+'_'+str(n_episodes)+'episodes'
+course_name = 'outside'
+savename = course_name+'_xCar_batch'+str(batch)+'_'+str(n_support)+'-shot_way_train_'+str(n_way)+'_lr_'+str(lr)+'_lrsch_'+str(sch_param_2)+'_'+str(sch_param_1)+'_'+str(n_episodes)+'episodes'
 print(savename)
 
 
@@ -57,15 +59,18 @@ dataset_val = datasets.ImageFolder(root=root_dir + "val", transform=transform)
 targets_val = [s[1] for s in dataset_val.samples]
 
 
-def extract_sample(batch, n_way, n_support, n_query, dataset, targets):
+def extract_sample(batch, n_way, n_support, n_query, dataset, targets, train):
     n_class_tot = len(dataset.classes)
     n_data_tot = len(dataset)
     sample_batch = torch.empty([batch, n_way, n_support + n_query] + list(dataset[0][0].shape))
     for b in range(batch):
         k = np.random.choice(np.unique(range(np.floor(n_class_tot/2).astype(int))), 1, replace=False).item()
         sample = torch.empty([0, n_support + n_query] + list(dataset[0][0].shape))
-        for cls in [2*k,2*k+1]:
-            weights = list(map(int, [x == y for (x, y) in zip(targets, [cls] * n_data_tot)]))
+        for i, cls in enumerate([2*k, 2*k+1]):
+            if not train or i == 0:
+                weights = list(map(int, [x == y for (x, y) in zip(targets, [cls] * n_data_tot)]))
+            else:
+                weights = list(map(int, [x != y for (x, y) in zip(targets, [cls - 1] * n_data_tot)]))
             sampler = WeightedRandomSampler(weights, n_support + n_query, replacement=False)
             loader = DataLoader(dataset=dataset, shuffle=False, batch_size=n_support + n_query, sampler=sampler,
                                 drop_last=False)  # , batch_size = n_support+n_query
@@ -107,8 +112,13 @@ def load_model(**kwargs):
 class StampNet(nn.Module):
     def __init__(self, encoder, cov_module):
         super(StampNet, self).__init__()
-        self.encoder = encoder.cuda(device)
-        self.cov_module = cov_module.cuda(device)
+        if device == "cpu":
+            self.encoder = encoder
+            self.cov_module = cov_module
+        else:
+            self.encoder = encoder.cuda(device)
+            self.cov_module = cov_module.cuda(device)
+
 
     def set_forward_loss(self, sample):
         """
@@ -167,7 +177,8 @@ class StampNet(nn.Module):
 
 
 # Train def-------------------------------------------------------------------------
-from tqdm.notebook import trange
+# from tqdm.notebook import trange
+from tqdm import trange
 
 
 def ftrain(model, optimizer, train_x, train_y, val_x, val_y, n_way, n_way_val, n_support, n_query, max_epoch,
@@ -181,7 +192,7 @@ def ftrain(model, optimizer, train_x, train_y, val_x, val_y, n_way, n_way_val, n
         train_x (np.array): images of training set
         train_y(np.array): labels of training set
         n_way (int): number of classes
-        n_support (int): number of labeled examples per class in the support set
+   ftrain     n_support (int): number of labeled examples per class in the support set
         n_query (int): number of labeled examples per class in the query set
         max_epoch (int): max epochs to train on
         epoch_size (int): episodes per epoch
@@ -189,14 +200,14 @@ def ftrain(model, optimizer, train_x, train_y, val_x, val_y, n_way, n_way_val, n
     """
 
     # multiply by sch_param_2 to shrink the learning rate every sch_param_1 epochs
-    scheduler = optim.lr_scheduler.StepLR(optimizer, sch_param_1, gamma=sch_param_2, last_epoch=-1)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=sch_param_1, gamma=sch_param_2, last_epoch=-1)
     epoch = 0  # epochs done so far
     stop = False  # status to know when to stop
 
     while epoch < max_epoch and not stop:
         model.train()
         for episode_batch in trange(epoch_size, desc="Epoch {:d} train".format(epoch + 1)):
-            sample = extract_sample(batch, n_way, n_support, n_query, train_x, train_y)
+            sample = extract_sample(batch, n_way, n_support, n_query, train_x, train_y, True)
             optimizer.zero_grad()
             loss, output = model.set_forward_loss(sample)
             running_loss = float(output['loss'])
@@ -213,7 +224,7 @@ def ftrain(model, optimizer, train_x, train_y, val_x, val_y, n_way, n_way_val, n
                                                                                   running_acc)) #print first few batch results
         epoch += 1
         if epoch % save_freq == 0:
-            torch.save(model, 'model_' + str(epoch) + '_epochs_' + savename + '.pth')
+            torch.save(model, 'ckpt/model_' + str(epoch) + '_epochs_' + savename + '.pth')
         if epoch % stats_freq == 0:
             print('Epoch {:d} -- Loss: {:.4f} Acc: {:.4f}'.format(epoch, running_loss, running_acc))
         # Validation--------------------------------------
@@ -222,7 +233,7 @@ def ftrain(model, optimizer, train_x, train_y, val_x, val_y, n_way, n_way_val, n
             running_acc = 0.0
             model.eval()
             for episode_batch in trange(epoch_size, desc="Epoch {:d} val".format(epoch)):
-                sample = extract_sample(batch, n_way_val, n_support, n_query, val_x, val_y)
+                sample = extract_sample(batch, n_way_val, n_support, n_query, val_x, val_y, False)
                 loss, output = model.set_forward_loss(sample)
                 running_loss += float(output['loss'])
                 running_acc += float(output['acc'])
@@ -359,7 +370,7 @@ loss_first_epoch = {
 
 print(time.time() - ts)
 
-ftrain(model, optimizer, dataset, targets, dataset_val, targets_val,
+(model, optimizer, dataset, targets, dataset_val, targets_val,
        n_way, n_way_val, n_support, n_query, n_epochs, n_episodes,
        accuracy_stats, loss_stats, save_freq, stats_freq,
        sch_param_1, sch_param_2, batch, acc_first_epoch, loss_first_epoch)
