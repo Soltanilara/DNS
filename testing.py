@@ -9,7 +9,7 @@ np.random.seed(0)
 torch.manual_seed(0)
 
 
-def LoadModel_LandmarkStats(device,root_dir,no_landmarks,model_name,channels,im_height,im_width,transform):
+def LoadModel_LandmarkStats(device, root_dir, no_landmarks, model_path, channels, im_height, im_width, transform):
     """
     Returns the loaded model, as well as necessary statistics from the landmark classes.
     Path landmark image folders are assumed to be under root_dir/landmarks and named as 0, 1, 2, etc.
@@ -17,7 +17,7 @@ def LoadModel_LandmarkStats(device,root_dir,no_landmarks,model_name,channels,im_
     :param device: device used to store variables and the model
     :param root_dir: root directory containing the model, as well as the "landmarks" folder
     :param no_landmarks: number of landmarks; folders named as 0, 1, 2, etc.
-    :param model_name: name of the model to be loaded
+    :param model_path: name of the model to be loaded
     :param channels: default: 3
     :param im_height: target height after transformation; default: 224
     :param im_width: after transformation; default: 224
@@ -25,14 +25,14 @@ def LoadModel_LandmarkStats(device,root_dir,no_landmarks,model_name,channels,im_
     """
     no_images = []
     landmarks = torch.empty((0, channels, im_height, im_width), requires_grad=False).cuda(device)
-    for i in range (no_landmarks):
-        f = glob.glob(root_dir+"landmarks/"+str(i)+"/*")
+    for i in range(no_landmarks):
+        f = glob.glob(root_dir+str(i).zfill(2)+'*'+"/*")
         no_images.append(len(f))
         for image in f:
             img = Image.open(image)
             img = transform(img).cuda(device)
-            landmarks = torch.cat([landmarks,img.unsqueeze(0)],0)
-    model = torch.load(root_dir+model_name, map_location='cpu').cuda(device)
+            landmarks = torch.cat([landmarks, img.unsqueeze(0)], 0)
+    model = torch.load(model_path, map_location='cpu').cuda(device)
     for param in model.parameters():
         param.requires_grad = False
     indiv_protos = model.encoder(landmarks)
@@ -76,24 +76,24 @@ def MatchDetector(model,image,lm_proto,lm_eigs,transform,probabilities,spread,th
 
 # Testing---------------------------------------------------------------------------------------------------------------
 
-device = 3
+device = 1
 channels, im_height, im_width = 3, 224, 224
-root_dir = "./ASB1F/testing/CW/"
-no_landmarks = 8
-landmark_frames = [273,322,1149,1193,1550,1578,2379,2409] #frame number of last positive sample for a landmark
-model_name = 'ModelMCN.pth'
-spread = 1e0
+root_dir = "/home/nick/dataset/ASB1F/test_landmark/"
+no_landmarks = 16
+landmark_frames = [260, 311, 1157, 1201, 1508, 1529, 2338, 2362, 3175, 3225, 3598, 3651, 4501, 4563, 4913, 4961] #frame number of last positive sample for a landmark
+model_path = '/home/nick/projects/FSL/ckpt/ModelMCN_ASB1F.pth'
+spread = 200  # 1e0
 threshold = 0.5
 transform = transforms.Compose([
     transforms.Resize((im_height, im_width)),
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
-model, proto_sup, eigs_sup = LoadModel_LandmarkStats(device,root_dir,no_landmarks,model_name,channels,im_height,im_width,transform)
+model, proto_sup, eigs_sup = LoadModel_LandmarkStats(device, root_dir, no_landmarks, model_path, channels, im_height, im_width, transform)
 
 probabilities = torch.zeros((15), requires_grad=False).cuda(device)
 landmark = 0
-f = sorted(glob.glob(root_dir+"testlap/*"))
+f = sorted(glob.glob(root_dir+"../test_flatten/*.jpg"))
 i=0
 frame_prob = []
 moving_avg_prob = []
@@ -109,8 +109,8 @@ while i<len(f) and landmark<no_landmarks:
         print('Update to landmark ',str(landmark), ' at frame ', f[i][-9:])
     i+=1
 # uncomment below if want to manually update upcoming landmarks if missed
-    if i>landmark_frames[landmark]:
-        landmark +=1
+    if landmark < no_landmarks and i > landmark_frames[landmark]:
+        landmark += 1
         probabilities = torch.zeros((15), requires_grad=False).cuda(device)
 
 

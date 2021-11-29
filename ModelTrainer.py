@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -12,6 +14,9 @@ from torch.utils.data import DataLoader, WeightedRandomSampler
 import csv
 import time
 from collections import OrderedDict
+from random import randint
+
+from utils.sampler import RandNegSampler
 
 print(torch.cuda.is_available())
 # torch.autograd.set_detect_anomaly(True)
@@ -23,7 +28,8 @@ torch.manual_seed(0)
 
 # root_dir = "/home/nick/dataset/outside/"
 # root_dir = "/home/nick/dataset/val_from_train/"
-root_dir = "/mnt/data/dataset/av/outside/"
+root_dir = "/home/nick/dataset/ASB1F/"
+# root_dir = "/mnt/data/dataset/av/outside/"
 
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
@@ -32,10 +38,10 @@ transform = transforms.Compose([
 ])
 
 
-device = 0 if torch.cuda.is_available() else "cpu"  # use GPU if available
+device = 1 if torch.cuda.is_available() else "cpu"  # use GPU if available
 n_epochs = 80
 n_episodes = 16
-batch = 16  #25
+batch = 25
 n_way = 2  #positive/negative
 n_way_val = 2
 n_support = 15
@@ -47,8 +53,8 @@ stats_freq = 1
 sch_param_1 = 20
 sch_param_2 = 0.5
 FC_len = 1000
-course_name = 'outside'
-savename = course_name+'_xCar_batch'+str(batch)+'_'+str(n_support)+'-shot_way_train_'+str(n_way)+'_lr_'+str(lr)+'_lrsch_'+str(sch_param_2)+'_'+str(sch_param_1)+'_'+str(n_episodes)+'episodes'
+course_name = 'ASB1F'
+savename = course_name+'_batch'+str(batch)+'_'+str(n_support)+'-shot_way_train_'+str(n_way)+'_lr_'+str(lr)+'_lrsch_'+str(sch_param_2)+'_'+str(sch_param_1)+'_'+str(n_episodes)+'episodes'
 print(savename)
 
 
@@ -57,34 +63,6 @@ targets = [s[1] for s in dataset.samples]
 
 dataset_val = datasets.ImageFolder(root=root_dir + "val", transform=transform)
 targets_val = [s[1] for s in dataset_val.samples]
-
-
-def extract_sample(batch, n_way, n_support, n_query, dataset, targets, train):
-    n_class_tot = len(dataset.classes)
-    n_data_tot = len(dataset)
-    sample_batch = torch.empty([batch, n_way, n_support + n_query] + list(dataset[0][0].shape))
-    for b in range(batch):
-        k = np.random.choice(np.unique(range(np.floor(n_class_tot/2).astype(int))), 1, replace=False).item()
-        sample = torch.empty([0, n_support + n_query] + list(dataset[0][0].shape))
-        for i, cls in enumerate([2*k, 2*k+1]):
-            if not train or i == 0:
-                weights = list(map(int, [x == y for (x, y) in zip(targets, [cls] * n_data_tot)]))
-            else:
-                weights = list(map(int, [x != y for (x, y) in zip(targets, [cls - 1] * n_data_tot)]))
-            sampler = WeightedRandomSampler(weights, n_support + n_query, replacement=False)
-            loader = DataLoader(dataset=dataset, shuffle=False, batch_size=n_support + n_query, sampler=sampler,
-                                drop_last=False)  # , batch_size = n_support+n_query
-            sample_cls = next(iter(loader))[0].unsqueeze(dim=0)
-            sample = torch.cat([sample, sample_cls], dim=0)
-        sample_batch[b] = sample
-    return ({
-        'images': sample_batch,
-        'batch': batch,
-        'n_way': n_way,
-        'n_support': n_support,
-        'n_query': n_query
-    })
-
 
 # Build model-------------------------------------------------------------------
 
@@ -98,8 +76,8 @@ def load_model(**kwargs):
 
     encoder = torch.hub.load('facebookresearch/swav:main', 'resnet50') #pretrained ResNet-50
     for param in encoder.parameters():
-        param.requires_grad = False #freezes the pretrained model parameters
-    encoder.fc = nn.Linear(2048,FCdim)
+        param.requires_grad = False  #freezes the pretrained model parameters
+    encoder.fc = nn.Linear(2048, FCdim)
 
     cov_module = nn.Sequential(
         nn.Linear(FCdim, FCdim),
@@ -108,6 +86,7 @@ def load_model(**kwargs):
         nn.Softplus()
     )
     return StampNet(encoder, cov_module)
+
 
 class StampNet(nn.Module):
     def __init__(self, encoder, cov_module):
@@ -118,7 +97,6 @@ class StampNet(nn.Module):
         else:
             self.encoder = encoder.cuda(device)
             self.cov_module = cov_module.cuda(device)
-
 
     def set_forward_loss(self, sample):
         """
@@ -151,8 +129,7 @@ class StampNet(nn.Module):
         eigs_qry = indiv_eigs[batch * n_way * n_support:].view(batch, 1, n_way, n_query, -1).expand(-1, n_way, -1, -1,
                                                                                                     -1)
         proto_sup = torch.mean(proto_indiv_sup, 2).view(batch, n_way, 1, -1)
-        deltasq_sup = torch.mean(torch.pow(proto_indiv_sup-proto_sup,2),2).view(batch, n_way, 1, -1)
-        eigs_sup = torch.mean(eigs_indiv_sup, 2).view(batch, n_way, 1, -1) +deltasq_sup
+        eigs_sup = torch.mean(eigs_indiv_sup, 2).view(batch, n_way, 1, -1)
 
         proto_sup = proto_sup.view(batch, n_way, 1, 1, -1).expand(-1, -1, n_way, n_query, -1)
         eigs_sup = eigs_sup.view(batch, n_way, 1, 1, -1).expand(-1, -1, n_way, n_query, -1)
@@ -203,11 +180,14 @@ def ftrain(model, optimizer, train_x, train_y, val_x, val_y, n_way, n_way_val, n
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=sch_param_1, gamma=sch_param_2, last_epoch=-1)
     epoch = 0  # epochs done so far
     stop = False  # status to know when to stop
+    best_acc = 0
+    model_best_path = ''
 
     while epoch < max_epoch and not stop:
         model.train()
         for episode_batch in trange(epoch_size, desc="Epoch {:d} train".format(epoch + 1)):
-            sample = extract_sample(batch, n_way, n_support, n_query, train_x, train_y, True)
+            sampler = RandNegSampler(batch, n_way, n_support, n_query, train_x, train_y, True)
+            sample = sampler.extract_sample()
             optimizer.zero_grad()
             loss, output = model.set_forward_loss(sample)
             running_loss = float(output['loss'])
@@ -219,12 +199,10 @@ def ftrain(model, optimizer, train_x, train_y, val_x, val_y, n_way, n_way_val, n
             if epoch == 0:
                 acc_first_epoch['train'].append(running_acc)
                 loss_first_epoch['train'].append(running_loss)
-                if episode_batch < 20:
-                    print('Epoch 1 batch {:d} -- Loss: {:.4f} Acc: {:.4f}'.format(episode_batch, running_loss,
-                                                                                  running_acc)) #print first few batch results
+                # if episode_batch < 20:
+                #     print('Epoch 1 batch {:d} -- Loss: {:.4f} Acc: {:.4f}'.format(episode_batch, running_loss,
+                #                                                                   running_acc)) #print first few batch results
         epoch += 1
-        if epoch % save_freq == 0:
-            torch.save(model, 'ckpt/model_' + str(epoch) + '_epochs_' + savename + '.pth')
         if epoch % stats_freq == 0:
             print('Epoch {:d} -- Loss: {:.4f} Acc: {:.4f}'.format(epoch, running_loss, running_acc))
         # Validation--------------------------------------
@@ -233,7 +211,8 @@ def ftrain(model, optimizer, train_x, train_y, val_x, val_y, n_way, n_way_val, n
             running_acc = 0.0
             model.eval()
             for episode_batch in trange(epoch_size, desc="Epoch {:d} val".format(epoch)):
-                sample = extract_sample(batch, n_way_val, n_support, n_query, val_x, val_y, False)
+                sampler = RandNegSampler(batch, n_way_val, n_support, n_query, val_x, val_y, False)
+                sample = sampler.extract_sample()
                 loss, output = model.set_forward_loss(sample)
                 running_loss += float(output['loss'])
                 running_acc += float(output['acc'])
@@ -242,6 +221,13 @@ def ftrain(model, optimizer, train_x, train_y, val_x, val_y, n_way, n_way_val, n
             loss_stats['val'].append(epoch_loss)
             accuracy_stats['val'].append(epoch_acc)
             print('Epoch_val {:d} -- Loss_val: {:.4f} Acc_val: {:.4f}'.format(epoch, epoch_loss, epoch_acc))
+            if epoch_acc > best_acc:
+                best_acc = epoch_acc
+                if model_best_path:
+                    os.remove(model_best_path)
+                model_best_path = 'ckpt/model_best_' + str(epoch) + '_epochs_' + savename + '.pth'
+                torch.save(model, model_best_path)
+                print('Model saved to: ' + model_best_path)
         w = csv.writer(open("accuracy_stats_"+savename+".csv", "w")) # updates a record of accuracies
         for key, val in accuracy_stats.items():
             w.writerow([key, val])
@@ -333,7 +319,7 @@ max_value = max(acc_list)
 max_index = acc_list.index(max_value)
 print(max_index+1) #prints the epoch number of pre-trained model with max accuracy
 
-model = torch.load('model_' + str(max_index+1) + '_epochs_' + savename + '.pth').cuda(device) #loads the model with highest validation accuracy
+model = torch.load('ckpt/model_best_' + str(max_index+1) + '_epochs_' + savename + '.pth').cuda(device) #loads the model with highest validation accuracy
 
 ## Begin fine-tuning----------------------------------------------------------------------------------------------------------
 
@@ -370,7 +356,7 @@ loss_first_epoch = {
 
 print(time.time() - ts)
 
-(model, optimizer, dataset, targets, dataset_val, targets_val,
+ftrain(model, optimizer, dataset, targets, dataset_val, targets_val,
        n_way, n_way_val, n_support, n_query, n_epochs, n_episodes,
        accuracy_stats, loss_stats, save_freq, stats_freq,
        sch_param_1, sch_param_2, batch, acc_first_epoch, loss_first_epoch)
@@ -419,8 +405,8 @@ max_index = acc_list.index(max_value)
 print(max_index+1) #prints the epoch number of fine-tuned model with max accuracy
 
 # Load the best-performing model and save with suitable name and format for evaluation----------------------------------
-model = torch.load('model_' + str(max_index+1) + '_epochs_' + savename + '.pth').cuda(device) #loads the fine-tuned model with highest validation accuracy
+model = torch.load('ckpt/model_' + str(max_index+1) + '_epochs_' + savename + '.pth').cuda(device) #loads the fine-tuned model with highest validation accuracy
 encoder = model.encoder
 cov_module = model.cov_module
 model=nn.Sequential(OrderedDict([('encoder',encoder),('cov',cov_module)]))
-torch.save(model,'ModelMCN_'+course_name+'.pth')
+torch.save(model, 'ckpt/ModelMCN_'+course_name+'.pth')

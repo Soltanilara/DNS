@@ -407,7 +407,8 @@ while again == 1:
                 shutil.move(old_image_path, new_image_path)
 
             p = os.listdir(file[:-5])
-            if len(p)%2 != 0:
+            p.sort()
+            if len(p) % 2 != 0:
                 src = file[:-5] + '/' + p[len(p)-1] + '/'
                 dest = file[:-5] + '/00-negative/'
                 allfiles = os.listdir(src)
