@@ -10,13 +10,13 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.autograd import Variable
 from torchvision import transforms, datasets
-from torch.utils.data import DataLoader, WeightedRandomSampler
 import csv
 import time
 from collections import OrderedDict
 from random import randint
 
-from utils.sampler import RandNegSampler
+from utils.loader import RandNegLoader, ConsecNegLoader
+from utils.utils import sortImgs
 
 print(torch.cuda.is_available())
 # torch.autograd.set_detect_anomaly(True)
@@ -36,7 +36,6 @@ transform = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
-
 
 device = 1 if torch.cuda.is_available() else "cpu"  # use GPU if available
 n_epochs = 80
@@ -59,6 +58,7 @@ print(savename)
 
 
 dataset = datasets.ImageFolder(root=root_dir + "train", transform=transform) #"train" folder contains image subfolders for positive and negative landmark images
+sortImgs(dataset)
 targets = [s[1] for s in dataset.samples]
 
 dataset_val = datasets.ImageFolder(root=root_dir + "val", transform=transform)
@@ -129,7 +129,8 @@ class StampNet(nn.Module):
         eigs_qry = indiv_eigs[batch * n_way * n_support:].view(batch, 1, n_way, n_query, -1).expand(-1, n_way, -1, -1,
                                                                                                     -1)
         proto_sup = torch.mean(proto_indiv_sup, 2).view(batch, n_way, 1, -1)
-        eigs_sup = torch.mean(eigs_indiv_sup, 2).view(batch, n_way, 1, -1)
+        deltasq_sup = torch.mean(torch.pow(proto_indiv_sup-proto_sup, 2), 2).view(batch, n_way, 1, -1)
+        eigs_sup = torch.mean(eigs_indiv_sup, 2).view(batch, n_way, 1, -1) + deltasq_sup
 
         proto_sup = proto_sup.view(batch, n_way, 1, 1, -1).expand(-1, -1, n_way, n_query, -1)
         eigs_sup = eigs_sup.view(batch, n_way, 1, 1, -1).expand(-1, -1, n_way, n_query, -1)
@@ -186,8 +187,8 @@ def ftrain(model, optimizer, train_x, train_y, val_x, val_y, n_way, n_way_val, n
     while epoch < max_epoch and not stop:
         model.train()
         for episode_batch in trange(epoch_size, desc="Epoch {:d} train".format(epoch + 1)):
-            sampler = RandNegSampler(batch, n_way, n_support, n_query, train_x, train_y, True)
-            sample = sampler.extract_sample()
+            loader = RandNegLoader(batch, n_way, n_support, n_query, train_x, train_y, True)
+            sample = loader.extract_sample()
             optimizer.zero_grad()
             loss, output = model.set_forward_loss(sample)
             running_loss = float(output['loss'])
@@ -211,8 +212,8 @@ def ftrain(model, optimizer, train_x, train_y, val_x, val_y, n_way, n_way_val, n
             running_acc = 0.0
             model.eval()
             for episode_batch in trange(epoch_size, desc="Epoch {:d} val".format(epoch)):
-                sampler = RandNegSampler(batch, n_way_val, n_support, n_query, val_x, val_y, False)
-                sample = sampler.extract_sample()
+                loader = RandNegLoader(batch, n_way_val, n_support, n_query, val_x, val_y, False)
+                sample = loader.extract_sample()
                 loss, output = model.set_forward_loss(sample)
                 running_loss += float(output['loss'])
                 running_acc += float(output['acc'])
