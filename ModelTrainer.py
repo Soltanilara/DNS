@@ -188,7 +188,7 @@ def ftrain(model, optimizer, train_x, train_y, val_x, val_y, n_way, n_way_val, n
         model.train()
         for episode_batch in trange(epoch_size, desc="Epoch {:d} train".format(epoch + 1)):
             loader = RandNegLoader(batch, n_way, n_support, n_query, train_x, train_y, True)
-            sample = loader.extract_sample()
+            sample = loader.get_batch()
             optimizer.zero_grad()
             loss, output = model.set_forward_loss(sample)
             running_loss = float(output['loss'])
@@ -213,7 +213,7 @@ def ftrain(model, optimizer, train_x, train_y, val_x, val_y, n_way, n_way_val, n
             model.eval()
             for episode_batch in trange(epoch_size, desc="Epoch {:d} val".format(epoch)):
                 loader = RandNegLoader(batch, n_way_val, n_support, n_query, val_x, val_y, False)
-                sample = loader.extract_sample()
+                sample = loader.get_batch()
                 loss, output = model.set_forward_loss(sample)
                 running_loss += float(output['loss'])
                 running_acc += float(output['acc'])
