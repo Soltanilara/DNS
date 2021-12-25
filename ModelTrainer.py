@@ -1,4 +1,5 @@
 import os
+import sys
 
 import numpy as np
 import pandas as pd
@@ -6,17 +7,15 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
-from torch.autograd import Variable
 from torchvision import transforms, datasets
 import csv
 import time
 from collections import OrderedDict
-from random import randint
 
+from models.StampNet import load_model
 from utils.loader import RandNegLoader, ConsecNegLoader
-from utils.utils import sortImgs
+from utils.utils import sortImgs, summarizeSuperCat
 
 print(torch.cuda.is_available())
 # torch.autograd.set_detect_anomaly(True)
@@ -26,10 +25,15 @@ ts = time.time()
 np.random.seed(0)
 torch.manual_seed(0)
 
-# root_dir = "/home/nick/dataset/outside/"
-# root_dir = "/home/nick/dataset/val_from_train/"
-root_dir = "/home/nick/dataset/ASB1F/"
-# root_dir = "/mnt/data/dataset/av/outside/"
+if sys.platform == 'linux':
+    # root_dir = "/home/nick/dataset/outside/"
+    # root_dir = "/home/nick/dataset/val_from_train/"
+    root_dir = "/home/nick/dataset/ASB1F/"
+    # root_dir = "/home/nick/dataset/ASB1F_V1/"
+    # root_dir = "/mnt/data/dataset/av/outside/"
+else:
+    # root_dir = '/Users/shidebo/dataset/AV/Sorted/ASB1F'
+    root_dir = '/Users/shidebo/dataset/AV/Sorted/ASB1F'
 
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
@@ -41,10 +45,10 @@ device = 1 if torch.cuda.is_available() else "cpu"  # use GPU if available
 n_epochs = 80
 n_episodes = 16
 batch = 25
-n_way = 2  #positive/negative
 n_way_val = 2
-n_support = 15
-n_query = 10
+sup_size = 12
+qry_size = 10
+qry_num = 4
 channels, im_height, im_width = 3, 224, 224
 lr = 1e-3
 save_freq = 1
@@ -53,105 +57,28 @@ sch_param_1 = 20
 sch_param_2 = 0.5
 FC_len = 1000
 course_name = 'ASB1F'
-savename = course_name+'_batch'+str(batch)+'_'+str(n_support)+'-shot_way_train_'+str(n_way)+'_lr_'+str(lr)+'_lrsch_'+str(sch_param_2)+'_'+str(sch_param_1)+'_'+str(n_episodes)+'episodes'
+savename = course_name +'_batch' + str(batch) +'_' + str(sup_size) + '-shot_lr_' + str(lr) + '_lrsch_' + str(sch_param_2) + '_' + str(sch_param_1) + '_' + str(n_episodes) + 'episodes'
 print(savename)
 
 
-dataset = datasets.ImageFolder(root=root_dir + "train", transform=transform) #"train" folder contains image subfolders for positive and negative landmark images
-sortImgs(dataset)
-targets = [s[1] for s in dataset.samples]
+# Old dataset
+# dataset = datasets.ImageFolder(root=root_dir + "train", transform=transform) #"train" folder contains image subfolders for positive and negative landmark images
+# sortImgs(dataset)
+# targets = [s[1] for s in dataset.samples]
+#
+# dataset_val = datasets.ImageFolder(root=root_dir + "val", transform=transform)
+# targets_val = [s[1] for s in dataset_val.samples]
 
-dataset_val = datasets.ImageFolder(root=root_dir + "val", transform=transform)
-targets_val = [s[1] for s in dataset_val.samples]
-
-# Build model-------------------------------------------------------------------
-
-def load_model(**kwargs):
-    """
-    Loads the network model
-    Arg:
-        FCdim: latent space dimensionality
-    """
-    FCdim = kwargs['FCdim']
-
-    encoder = torch.hub.load('facebookresearch/swav:main', 'resnet50') #pretrained ResNet-50
-    for param in encoder.parameters():
-        param.requires_grad = False  #freezes the pretrained model parameters
-    encoder.fc = nn.Linear(2048, FCdim)
-
-    cov_module = nn.Sequential(
-        nn.Linear(FCdim, FCdim),
-        nn.Tanh(),
-        nn.Linear(FCdim, FCdim),
-        nn.Softplus()
-    )
-    return StampNet(encoder, cov_module)
-
-
-class StampNet(nn.Module):
-    def __init__(self, encoder, cov_module):
-        super(StampNet, self).__init__()
-        if device == "cpu":
-            self.encoder = encoder
-            self.cov_module = cov_module
-        else:
-            self.encoder = encoder.cuda(device)
-            self.cov_module = cov_module.cuda(device)
-
-    def set_forward_loss(self, sample):
-        """
-        Takes the sample batch and computes loss, accuracy and output for classification task
-        """
-        sample_images = sample['images'].cuda(device)
-        batch = sample['batch']
-        n_way = sample['n_way']
-        n_support = sample['n_support']
-        n_query = sample['n_query']
-
-        x_support = sample_images[:, :, :n_support]
-        x_query = sample_images[:, :, n_support:]
-
-        # target indices are 0 ... n_way-1
-        target_inds = torch.arange(0, n_way).view(1, n_way, 1, 1).expand(batch, n_way, n_query, 1).long()
-        target_inds = Variable(target_inds, requires_grad=False).cuda(device)
-
-        # concatenate and prepare images of the support and query sets for inputting to the network
-        x = torch.cat([x_support.contiguous().view(batch * n_way * n_support, *x_support.size()[3:]),
-                       x_query.contiguous().view(batch * n_way * n_query, *x_query.size()[3:])], 0)
-        z = self.encoder.forward(x)
-        indiv_protos = z
-        indiv_eigs = self.cov_module.forward(z) + 1e-8
-
-        proto_indiv_sup = indiv_protos[:batch * n_way * n_support].view(batch, n_way, n_support, -1)
-        proto_qry = indiv_protos[batch * n_way * n_support:].view(batch, 1, n_way, n_query, -1).expand(-1, n_way, -1,
-                                                                                                       -1, -1)
-        eigs_indiv_sup = indiv_eigs[:batch * n_way * n_support].view(batch, n_way, n_support, -1)
-        eigs_qry = indiv_eigs[batch * n_way * n_support:].view(batch, 1, n_way, n_query, -1).expand(-1, n_way, -1, -1,
-                                                                                                    -1)
-        proto_sup = torch.mean(proto_indiv_sup, 2).view(batch, n_way, 1, -1)
-        deltasq_sup = torch.mean(torch.pow(proto_indiv_sup-proto_sup, 2), 2).view(batch, n_way, 1, -1)
-        eigs_sup = torch.mean(eigs_indiv_sup, 2).view(batch, n_way, 1, -1) + deltasq_sup
-
-        proto_sup = proto_sup.view(batch, n_way, 1, 1, -1).expand(-1, -1, n_way, n_query, -1)
-        eigs_sup = eigs_sup.view(batch, n_way, 1, 1, -1).expand(-1, -1, n_way, n_query, -1)
-
-        diff = proto_sup - proto_qry
-        dists = torch.sum((diff / (eigs_sup + eigs_qry)).view(batch * n_way * n_way * n_query, -1) * diff.view(
-            batch * n_way * n_way * n_query, -1), dim=1).view(batch, n_way, n_way, n_query).permute(0, 2, 3, 1)
-
-        log_p_y = F.log_softmax(-dists, dim=3)
-
-        loss_val = -log_p_y.gather(3, target_inds).squeeze().view(
-            -1).mean()  # sum negative log softmax for the correct class, normalize by number of entries
-        _, y_hat = log_p_y.max(3)
-        acc_val = torch.eq(y_hat, target_inds.squeeze()).float().mean()
-        acc_means = torch.eq(y_hat, target_inds.squeeze()).view(batch, -1).float().mean(1)
-
-        return loss_val, {
-            'loss': loss_val.item(),
-            'acc': acc_val.item(),
-            'acc_means': acc_means
-        }
+dataset_train = datasets.coco.CocoDetection(
+    root=root_dir,
+    annFile='coco/train.json',
+    transform=transform
+)
+dataset_val = datasets.coco.CocoDetection(
+    root=root_dir,
+    annFile='coco/val.json',
+    transform=transform
+)
 
 
 # Train def-------------------------------------------------------------------------
@@ -159,7 +86,7 @@ class StampNet(nn.Module):
 from tqdm import trange
 
 
-def ftrain(model, optimizer, train_x, train_y, val_x, val_y, n_way, n_way_val, n_support, n_query, max_epoch,
+def ftrain(model, optimizer, dataset_train, dataset_val, sup_size, qry_size, qry_num, max_epoch,
            epoch_size, accuracy_stats, loss_stats, save_freq, stats_freq, sch_param_1, sch_param_2, batch,
            acc_first_epoch, loss_first_epoch):
     """
@@ -187,7 +114,8 @@ def ftrain(model, optimizer, train_x, train_y, val_x, val_y, n_way, n_way_val, n
     while epoch < max_epoch and not stop:
         model.train()
         for episode_batch in trange(epoch_size, desc="Epoch {:d} train".format(epoch + 1)):
-            loader = RandNegLoader(batch, n_way, n_support, n_query, train_x, train_y, True)
+            loader = ConsecNegLoader(batch, sup_size, qry_size, qry_num, dataset_train, summarizeSuperCat(dataset_train))
+            # loader = RandNegLoader(batch, n_way, n_support, n_query, dataset_train, targets, None)
             sample = loader.get_batch()
             optimizer.zero_grad()
             loss, output = model.set_forward_loss(sample)
@@ -200,9 +128,9 @@ def ftrain(model, optimizer, train_x, train_y, val_x, val_y, n_way, n_way_val, n
             if epoch == 0:
                 acc_first_epoch['train'].append(running_acc)
                 loss_first_epoch['train'].append(running_loss)
-                # if episode_batch < 20:
-                #     print('Epoch 1 batch {:d} -- Loss: {:.4f} Acc: {:.4f}'.format(episode_batch, running_loss,
-                #                                                                   running_acc)) #print first few batch results
+                if episode_batch < 20:
+                    print('Epoch 1 batch {:d} -- Loss: {:.4f} Acc: {:.4f}'.format(episode_batch, running_loss,
+                                                                                  running_acc)) #print first few batch results
         epoch += 1
         if epoch % stats_freq == 0:
             print('Epoch {:d} -- Loss: {:.4f} Acc: {:.4f}'.format(epoch, running_loss, running_acc))
@@ -212,7 +140,7 @@ def ftrain(model, optimizer, train_x, train_y, val_x, val_y, n_way, n_way_val, n
             running_acc = 0.0
             model.eval()
             for episode_batch in trange(epoch_size, desc="Epoch {:d} val".format(epoch)):
-                loader = RandNegLoader(batch, n_way_val, n_support, n_query, val_x, val_y, False)
+                loader = ConsecNegLoader(batch, sup_size, qry_size, qry_num, dataset_val, summarizeSuperCat(dataset_val))
                 sample = loader.get_batch()
                 loss, output = model.set_forward_loss(sample)
                 running_loss += float(output['loss'])
@@ -239,7 +167,8 @@ def ftrain(model, optimizer, train_x, train_y, val_x, val_y, n_way, n_way_val, n
 
 # Begin pre-training------------------------------------------------------------------------
 
-model = load_model(FCdim=FC_len)
+# todo: remove device in StampNet and use model(cuda) here. (lose speed?)
+model = load_model(FCdim=FC_len, input_size=qry_num, device=device)
 
 # shows the number of trainable parameters----------------------------------------------
 model_parameters = filter(lambda p: p.requires_grad, model.parameters())
@@ -271,8 +200,8 @@ loss_first_epoch = {
 }
 
 print(time.time() - ts)
-ftrain(model, optimizer, dataset, targets, dataset_val, targets_val,
-       n_way, n_way_val, n_support, n_query, n_epochs, n_episodes,
+ftrain(model, optimizer, dataset_train, dataset_val,
+       sup_size, qry_size, qry_num, n_epochs, n_episodes,
        accuracy_stats, loss_stats, save_freq, stats_freq,
        sch_param_1, sch_param_2, batch, acc_first_epoch, loss_first_epoch)
 time.time() - ts
@@ -327,7 +256,7 @@ model = torch.load('ckpt/model_best_' + str(max_index+1) + '_epochs_' + savename
 n_episodes = 100
 batch = 4
 lr = 1e-5
-savename = course_name+'_FineTune_NewMix_SymMah_batch'+str(batch)+'_'+str(n_support)+'-shot_way_train_'+str(n_way)+'_lr_'+str(lr)+'_lrsch_'+str(sch_param_2)+'_'+str(sch_param_1)+'_'+str(n_episodes)+'episodes'
+savename = course_name +'_FineTune_NewMix_SymMah_batch' + str(batch) +'_' + str(sup_size) + '-shot_way_train_' + str(n_way) + '_lr_' + str(lr) + '_lrsch_' + str(sch_param_2) + '_' + str(sch_param_1) + '_' + str(n_episodes) + 'episodes'
 print(savename)
 
 for param in model.parameters():
@@ -358,7 +287,7 @@ loss_first_epoch = {
 print(time.time() - ts)
 
 ftrain(model, optimizer, dataset, targets, dataset_val, targets_val,
-       n_way, n_way_val, n_support, n_query, n_epochs, n_episodes,
+       n_way, n_way_val, sup_size, qry_size, n_epochs, n_episodes,
        accuracy_stats, loss_stats, save_freq, stats_freq,
        sch_param_1, sch_param_2, batch, acc_first_epoch, loss_first_epoch)
 time.time() - ts
