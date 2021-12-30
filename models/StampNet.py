@@ -1,7 +1,6 @@
 import torch
 from torch import nn
 from torch.autograd import Variable
-import torch.nn.functional as F
 
 
 def load_model(**kwargs):
@@ -12,7 +11,6 @@ def load_model(**kwargs):
     """
     FCdim = kwargs['FCdim']
     device = kwargs['device']
-    input_size = kwargs['input_size']
 
     encoder = torch.hub.load('facebookresearch/swav:main', 'resnet50') #pretrained ResNet-50
     for param in encoder.parameters():
@@ -27,8 +25,8 @@ def load_model(**kwargs):
     )
 
     classifier = nn.Sequential(
-        nn.Linear(input_size, 20),
-        nn.Linear(20, input_size),
+        nn.Linear(FCdim, 100),
+        nn.Linear(100, 1),
         nn.Sigmoid()
     )
 
@@ -59,15 +57,13 @@ class StampNet(nn.Module):
         qry_size = sample['qry_size']
         sup_num = 1
         qry_num = int((sample['images'].shape[1] - sup_size) / qry_size)
-        y = sample['labels']
+        target_inds = Variable(sample['labels'], requires_grad=False).cuda(self.device)
 
         x_support = sample_images[:, :sup_size]
         x_query = sample_images[:, sup_size:]
 
         # target indices are 0 ... n_way-1
         # target_inds = torch.arange(0, 2).view(1, n_way, 1, 1).expand(batch, n_way, qry_size, 1).long()
-        target_inds = y[:, 1:]
-        target_inds = Variable(target_inds, requires_grad=False).cuda(self.device)
 
         # concatenate and prepare images of the support and query sets for inputting to the network
         x = torch.cat([x_support.contiguous().view(batch * sup_size, *x_support.size()[-3:]),
@@ -85,14 +81,16 @@ class StampNet(nn.Module):
         proto_qry = torch.mean(proto_qry, 2)
         eigs_qry = torch.mean(eigs_qry, 2)
 
+        # proto_qry = proto_qry.view(batch, qry_num * qry_size, -1)
+        # eigs_qry = eigs_qry.view(batch, qry_num * qry_size, -1)
+
         proto_sup = proto_sup.view(batch, 1, -1).expand(-1, qry_num, -1)
         eigs_sup = eigs_sup.view(batch, 1, -1).expand(-1, qry_num, -1)
 
         diff = proto_sup - proto_qry
-        dists = torch.sum((diff / (eigs_sup + eigs_qry)).view(batch * qry_num, -1) *
-                          diff.view(batch * qry_num, -1), dim=1).view(batch, qry_num)
+        dists = (diff / (eigs_sup + eigs_qry)).view(batch * qry_num, -1) * diff.view(batch * qry_num, -1)
 
-        pred = self.classifier(dists)
+        pred = self.classifier(dists).view(batch, qry_num)
         pred_label = torch.round(pred)
 
         loss = nn.BCELoss()

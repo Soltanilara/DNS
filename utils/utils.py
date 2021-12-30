@@ -71,3 +71,26 @@ def summarizeSuperCat(dataset: CocoDetection):
             'direction2SuperCat': direction2SuperCat,
         }
     return summary
+
+
+def get_imgId2landmarkId(dataset: CocoDetection):
+    imgId2landmarkId = {}
+    landmark_borders = {
+        'start': [],
+        'end': [],
+    }
+    landmark_id = -1
+
+    for catId in dataset.coco.getCatIds():
+        img_ids = sorted(dataset.coco.getImgIds(catIds=catId))
+
+        if 'negative' in dataset.coco.loadCats(catId)[0]['name']:
+            landmark_id += 1
+        else:
+            landmark_borders['start'].append(img_ids[0])
+            landmark_borders['end'].append(img_ids[-1])
+
+        for img_id in img_ids:
+            imgId2landmarkId[img_id] = landmark_id
+
+    return imgId2landmarkId, landmark_borders
