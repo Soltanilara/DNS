@@ -50,9 +50,9 @@ class ConsecLoader:
         self.qry_size = qry_size
         self.qry_num = qry_num
         self.dataset = dataset
-        self.lap2CatId = summary['superCat2CatId']
+        self.lap2CatId = summary['lap2CatId']
         self.PN2CatId = summary['PN2CatId']
-        self.direction2Lap = summary['direction2SuperCat']
+        self.location2Lap = summary['location2Lap']
 
     def get_sample(self, cls):
         label = []
@@ -67,8 +67,8 @@ class ConsecLoader:
         sample = next(iter(loader_sup))[0]
 
         # sample laps without replacement and sample a positive query set from each
-        laps_direction = self.direction2Lap[cat['direction']]
-        laps = list(np.random.choice(list(laps_direction), int(self.qry_num / 2), replace=True))
+        laps_direction = self.location2Lap[cat['location']][cat['direction']]
+        laps = list(np.random.choice(list(laps_direction), min(2, int(self.qry_num / 2)), replace=True))
         for lap in laps:
             catId = [i for i in self.lap2CatId[lap] if self.dataset.coco.loadCats(i)[0]['name'] == cat['name']][0]
             qry_img_ids = self.dataset.coco.getImgIds(catIds=catId)
@@ -83,7 +83,7 @@ class ConsecLoader:
             label.append(1.)
 
         # sample laps without replacement and sample a negative query set from each
-        laps = list(np.random.choice(list(laps_direction), self.qry_num - int(self.qry_num / 2), replace=True))
+        laps = list(np.random.choice(list(laps_direction), self.qry_num - min(2, int(self.qry_num / 2)), replace=True))
         for lap in laps:
             catId_pos = [i for i in self.lap2CatId[lap] if self.dataset.coco.loadCats(i)[0]['name'] == cat['name']][0]
             pos_imgIds = self.dataset.coco.getImgIds(catIds=catId_pos)
@@ -172,17 +172,11 @@ class RandNegLoader(ConsecLoader):
 class TestLoader:
     def __init__(self, dataset, summary):
         self.dataset = dataset
-        self.PN2CatId = summary['PN2CatId']
-        self.lap2CatId = summary['superCat2CatId']
-        self.direction2Lap = summary['direction2SuperCat']
-
-    def get_loader(self):
-        return DataLoader(dataset=self.dataset, shuffle=False, batch_size=1, pin_memory=False, drop_last=False)
+        self.pos_catIds = summary['PN2CatId']['positive']
 
     def get_all_landmarks(self):
-        pos_catIds = self.PN2CatId['positive']
         landmarks = None
-        for catId in pos_catIds:
+        for catId in self.pos_catIds:
             ids_img_sup = self.dataset.coco.getImgIds(catIds=catId)
             loader = DataLoader(dataset=Subset(self.dataset, ids_img_sup), shuffle=False, batch_size=len(ids_img_sup),
                                 pin_memory=False, drop_last=False)

@@ -2,7 +2,7 @@ from torchvision.datasets import CocoDetection
 
 
 def sortImgs(dataset):
-    imgs = dataset.imgs
+    imgs = dataset.img
     targets = dataset.targets
     start_inds = [0]
     imgs_new = []
@@ -32,43 +32,47 @@ def sortImgs(dataset):
             cls += 1
 
     dataset.samples = imgs_new
-    dataset.imgs = imgs_new
+    dataset.img = imgs_new
     dataset.targets = targets_new
 
 
-def summarizeSuperCat(dataset: CocoDetection):
-    superCat2CatId = {}
+def summarizeDataset(dataset: CocoDetection):
+    lap2CatId = {}
+    location2Lap = {}
     PN2CatId = {
         'positive': [],
         'negative': [],
-    }
-    direction2SuperCat = {
-        'cw': [],
-        'ccw': [],
     }
     cats = dataset.coco.loadCats(dataset.coco.getCatIds())
     for cat in cats:
         catId = cat['id']
         catName = cat['name']
-        superCat = cat['supercategory']
+        lap = cat['lap']
         direction = cat['direction']
-        if superCat not in superCat2CatId:
-            superCat2CatId[superCat] = [catId]
+        location = cat['location']
+        if lap not in lap2CatId:
+            lap2CatId[lap] = [catId]
         else:
-            superCat2CatId[superCat].append(catId)
+            lap2CatId[lap].append(catId)
 
         if 'negative' in catName:
             PN2CatId['negative'].append(catId)
         else:
             PN2CatId['positive'].append(catId)
 
-        if superCat not in direction2SuperCat[direction]:
-            direction2SuperCat[direction].append(superCat)
+        if location not in location2Lap:
+            location2Lap[location] = {
+                'cw': [],
+                'ccw': [],
+            }
+
+        if lap not in location2Lap[location][direction]:
+            location2Lap[location][direction].append(lap)
 
         summary = {
-            'superCat2CatId': superCat2CatId,
+            'lap2CatId': lap2CatId,
             'PN2CatId': PN2CatId,
-            'direction2SuperCat': direction2SuperCat,
+            'location2Lap': location2Lap,
         }
     return summary
 
@@ -80,11 +84,16 @@ def get_imgId2landmarkId(dataset: CocoDetection):
         'end': [],
     }
     landmark_id = -1
+    catIds = dataset.coco.getCatIds()
 
-    for catId in dataset.coco.getCatIds():
+    if len(catIds) % 4 != 0:
+        ignore_1st = len(catIds) // 4 * 2
+        ignore_ids = [ignore_1st, ignore_1st + int(len(catIds) / 2)]
+
+    for catId in catIds:
         img_ids = sorted(dataset.coco.getImgIds(catIds=catId))
 
-        if 'negative' in dataset.coco.loadCats(catId)[0]['name']:
+        if 'negative' in dataset.coco.loadCats(catId)[0]['name'] and catId not in ignore_ids:
             landmark_id += 1
         else:
             landmark_borders['start'].append(img_ids[0])

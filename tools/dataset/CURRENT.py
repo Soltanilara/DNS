@@ -142,7 +142,7 @@ while again == 1:
                 floor = 100*math.floor(h[0]/100)
                 ceil = 100*math.ceil(h[0]/100)
                 tooclose = 10
-                numimgs = 200
+                numimgs = 'n'
             else:
                 window = input("How many frames around landmarks should the window be (d for default)(odd number)\n")
                 if window == 'd':
@@ -392,9 +392,9 @@ while again == 1:
                         else:
                             negpos = "straight"
                             straightorno = not straightorno
-                        
 
-                folder_name = (str(foldercounter)).zfill(2) + "-" + negpos
+                prefix = str(foldercounter) + '0' if negpos == 'negative' else str(foldercounter) + '1'
+                folder_name = prefix.zfill(3) + "-" + negpos
                 #print(folder_name)
 
                 new_path = os.path.join(folder_path, folder_name)
@@ -406,15 +406,16 @@ while again == 1:
                 new_image_path = os.path.join(new_path, image)
                 shutil.move(old_image_path, new_image_path)
 
-            p = os.listdir(file[:-5])
-            p.sort()
-            if len(p) % 2 != 0:
-                src = file[:-5] + '/' + p[len(p)-1] + '/'
-                dest = file[:-5] + '/00-negative/'
-                allfiles = os.listdir(src)
-                for negimage in allfiles:
-                    shutil.move(src+negimage, dest+negimage)
-                os.rmdir(src)
+            # Move the negative images after the last landmark to the first negative folder
+            # p = os.listdir(file[:-5])
+            # p.sort()
+            # if len(p) % 2 != 0:
+            #     src = file[:-5] + '/' + p[len(p)-1] + '/'
+            #     dest = file[:-5] + '/001-negative/'
+            #     allfiles = os.listdir(src)
+            #     for negimage in allfiles:
+            #         shutil.move(src+negimage, dest+negimage)
+            #     os.rmdir(src)
 
             ## ----------------------------------- CERTAIN AMT OF IMAGES IN NEGATIVE FOLDERS -----------------------------
 
@@ -457,10 +458,10 @@ while again == 1:
             if folderorfile == "folder":
                 if file == datasetarray[-1]:
                     again = 0
-                    print("Finished!")
+                    print("Done: " + folder_path + ", finished!")
                     break
                 else:
-                    print("Beginning next dataset... ")
+                    print("Done: " + folder_path + ", beginning next dataset... ")
             else:
                 finalfigure.show()
                 asdj = input("Run another dataset? (y/n)\n")

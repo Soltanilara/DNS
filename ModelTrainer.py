@@ -15,7 +15,7 @@ from collections import OrderedDict
 
 from models.StampNet import load_model
 from utils.loader import RandNegLoader, ConsecLoader
-from utils.utils import sortImgs, summarizeSuperCat
+from utils.utils import sortImgs, summarizeDataset
 
 print(torch.cuda.is_available())
 # torch.autograd.set_detect_anomaly(True)
@@ -28,12 +28,12 @@ torch.manual_seed(0)
 if sys.platform == 'linux':
     # root_dir = "/home/nick/dataset/outside/"
     # root_dir = "/home/nick/dataset/val_from_train/"
-    root_dir = "/home/nick/dataset/ASB1F/"
+    root_dir = "/home/nick/dataset/all8/"
     # root_dir = "/home/nick/dataset/ASB1F_V1/"
     # root_dir = "/mnt/data/dataset/av/outside/"
 else:
     # root_dir = '/Users/shidebo/dataset/AV/Sorted/ASB1F'
-    root_dir = '/Users/shidebo/dataset/AV/Sorted/ASB1F'
+    root_dir = '/Users/shidebo/dataset/AV/Sorted/'
 
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
@@ -41,22 +41,21 @@ transform = transforms.Compose([
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
 
-device = 1 if torch.cuda.is_available() else "cpu"  # use GPU if available
-n_epochs = 20
+device = 0 if torch.cuda.is_available() else "cpu"  # use GPU if available
+n_epochs = 40
 n_episodes = 16
-batch = 24
-sup_size = 12
+batch = 32
+sup_size = 10
 qry_size = 10
-qry_num = 5
+qry_num = 6
 channels, im_height, im_width = 3, 224, 224
 lr = 1e-3
-# lr = 1e-4
 save_freq = 1
 stats_freq = 1
 sch_param_1 = 20
 sch_param_2 = 0.5
 FC_len = 1000
-course_name = 'ASB1F'
+course_name = 'all8'
 savename = course_name +'_batch' + str(batch) +'_' + str(sup_size) + '-shot_lr_' + str(lr) + '_lrsch_' + str(sch_param_2) + '_' + str(sch_param_1) + '_' + str(n_episodes) + 'episodes'
 print(savename)
 
@@ -114,7 +113,7 @@ def ftrain(model, optimizer, dataset_train, dataset_val, sup_size, qry_size, qry
         model.train()
         for episode_batch in trange(epoch_size, desc="Epoch {:d} train".format(epoch + 1)):
             # loader = RandNegLoader(batch, sup_size, qry_size, qry_num, dataset_train, summarizeSuperCat(dataset_train))
-            loader = ConsecLoader(batch, sup_size, qry_size, qry_num, dataset_train, summarizeSuperCat(dataset_train))
+            loader = ConsecLoader(batch, sup_size, qry_size, qry_num, dataset_train, summarizeDataset(dataset_train))
             sample = loader.get_batch()
             optimizer.zero_grad()
 
@@ -141,7 +140,7 @@ def ftrain(model, optimizer, dataset_train, dataset_val, sup_size, qry_size, qry
             model.eval()
             for _ in trange(epoch_size, desc="Epoch {:d} val".format(epoch)):
                 # loader = RandNegLoader(batch, sup_size, qry_size, qry_num, dataset_val, summarizeSuperCat(dataset_val))
-                loader = ConsecLoader(batch, sup_size, qry_size, qry_num, dataset_val, summarizeSuperCat(dataset_val))
+                loader = ConsecLoader(batch, sup_size, qry_size, qry_num, dataset_val, summarizeDataset(dataset_val))
                 sample = loader.get_batch()
                 loss, output = model.set_forward_loss(sample)
                 running_loss += float(output['loss'])
