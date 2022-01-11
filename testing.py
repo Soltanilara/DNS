@@ -9,7 +9,7 @@ from tqdm import tqdm
 from time import time
 
 from utils.loader import TestLoader
-from utils.utils import summarizeSuperCat, get_imgId2landmarkId
+from utils.utils import summarizeDataset, get_imgId2landmarkId
 
 
 def LoadModel_LandmarkStats(device, loader, model_path):
@@ -45,7 +45,7 @@ def LoadModel_LandmarkStats(device, loader, model_path):
     return model, proto_sup, eigs_sup
 
 
-def MatchDetector(model, image, lm_proto, lm_eigs, transform, probabilities, spread, threshold, device):
+def MatchDetector(model, image, lm_proto, lm_eigs, probabilities, threshold, device):
     """
     - Returns a landmark match/no match decision as "match" (boolean)
     - Updates the stored probability vector (similarities interpreted as probabilities) corresponding to the few recent
@@ -62,6 +62,8 @@ def MatchDetector(model, image, lm_proto, lm_eigs, transform, probabilities, spr
     lm_eigs = lm_eigs
     qry_proto = model.encoder(image.cuda(device)).squeeze()
     qry_eigs = model.cov(qry_proto).squeeze() + 1e-8
+    qry_proto = torch.mean(qry_proto, dim=0)
+    qry_eigs = torch.mean(qry_eigs, dim=0)
 
     diff = lm_proto - qry_proto
     dist = diff / (qry_eigs + lm_eigs) * diff
@@ -75,85 +77,93 @@ def MatchDetector(model, image, lm_proto, lm_eigs, transform, probabilities, spr
         match = False
     return match, probabilities
 
-# Testing---------------------------------------------------------------------------------------------------------------
+
+if __name__ == '__main__':
+    ts = time()
+
+    np.random.seed(0)
+    torch.manual_seed(0)
+
+    root_dir = "/home/nick/dataset/all8/"
+    model_path = '/home/nick/projects/FSL/ckpt/ModelMCN_all8.pth'
+    coco_path = 'coco/test_ASB_Outside.json'
+
+    device = 1
+    channels, im_height, im_width = 3, 224, 224
+    threshold = 0.5
+    qry_size = 5
+
+    transform = transforms.Compose([
+        transforms.Resize((im_height, im_width)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+    dataset_test = datasets.coco.CocoDetection(
+            root=root_dir,
+            annFile=coco_path,
+            transform=transform
+        )
+    dataloader = TestLoader(dataset_test, summarizeDataset(dataset_test))
+
+    model, proto_sup, eigs_sup = LoadModel_LandmarkStats(device, dataloader, model_path)
+
+    landmark = 0
+    i = 0
+    frame_prob = []
+    moving_avg_prob = []
+    qry_imgs = None
+    probabilities = torch.zeros(15, requires_grad=False).cuda(device)
+    imgId2landmarkId, landmark_borders = get_imgId2landmarkId(dataset_test)
+    dataloader = DataLoader(dataset=dataset_test, shuffle=False, batch_size=1, pin_memory=False, drop_last=False)
+    for i, img in enumerate(tqdm(dataloader)):
+        if qry_imgs is None:
+            qry_imgs = img[0]
+            frame_prob += [0]
+            moving_avg_prob += [0]
+        elif qry_imgs.shape[0] < qry_size:
+            qry_imgs = torch.cat([qry_imgs, img[0]], dim=0)
+            frame_prob += [0]
+            moving_avg_prob += [0]
+        else:
+            qry_imgs = torch.cat([qry_imgs[1:], img[0]], dim=0)
+            landmark = imgId2landmarkId[i]
+            lm_proto = proto_sup[landmark, :]
+            lm_eigs = eigs_sup[landmark, :]
+            match, probabilities = MatchDetector(model, qry_imgs, lm_proto, lm_eigs, probabilities, threshold, device)
+            frame_prob += [probabilities[-1].cpu().item()]
+            moving_avg_prob += [probabilities.mean().cpu().item()]
+
+            if match:
+                print('\nUpdate to landmark ', str(landmark), ' at frame ', i)
 
 
-ts = time()
+    # plotting--------------------------------------------------------------------------------------------------------------
+    fig = plt.figure(figsize=(16, 8))
+    ax = fig.add_subplot(111)
+    ax.set_xlabel('Frame number', fontsize=20)
+    ax.set_ylabel('Landmark frame probability', fontsize=20)
+    ax.plot(frame_prob)
+    ax.grid()
+    plt.vlines(landmark_borders['start'], 0, 1, 'g', 'dashed')
+    plt.vlines(landmark_borders['end'], 0, 1, 'r', 'dashed')
+    plt.ylim(0, 1)
+    plt.xlim(0, i)
+    # plt.show
+    plt.savefig(root_dir+'landmark frame probability.png', dpi=300)
+    # plt.close()
 
-np.random.seed(0)
-torch.manual_seed(0)
+    fig = plt.figure(figsize=(16, 8))
+    ax = fig.add_subplot(111)
+    ax.set_xlabel('Frame number', fontsize=20)
+    ax.set_ylabel('Moving average probability', fontsize=20)
+    ax.plot(moving_avg_prob)
+    ax.grid()
+    plt.vlines(landmark_borders['start'], 0, 1, 'g', 'dashed')
+    plt.vlines(landmark_borders['end'], 0, 1, 'r', 'dashed')
+    plt.ylim(0, 1)
+    plt.xlim(0, i)
+    # plt.show
+    plt.savefig(root_dir+'Moving average probability.png', dpi=300)
+    # plt.close()
 
-device = 1
-channels, im_height, im_width = 3, 224, 224
-root_dir = "/home/nick/dataset/ASB1F/"
-# root_dir = "/home/nick/dataset/ASB1F/val_landmark/"
-# root_dir = "/home/nick/dataset/ASB1F/train_landmark/"
-no_landmarks = 16
-model_path = '/home/nick/projects/FSL/ckpt/ModelMCN_ASB1F.pth'
-# model_path = '/home/nick/projects/FSL/ckpt/model_best_3_epochs_ASB1F_batch30_12-shot_lr_0.001_lrsch_0.5_20_16episodes.pth'
-spread = 200  # 1e0
-threshold = 0.5
-
-transform = transforms.Compose([
-    transforms.Resize((im_height, im_width)),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-])
-dataset_test = datasets.coco.CocoDetection(
-        root=root_dir,
-        annFile='coco/test.json',
-        transform=transform
-    )
-dataloader = TestLoader(dataset_test, summarizeSuperCat(dataset_test))
-
-model, proto_sup, eigs_sup = LoadModel_LandmarkStats(device, dataloader, model_path)
-
-landmark = 0
-i = 0
-frame_prob = []
-moving_avg_prob = []
-probabilities = torch.zeros((15), requires_grad=False).cuda(device)
-imgId2landmarkId, landmark_borders = get_imgId2landmarkId(dataset_test)
-dataloader = dataloader.get_loader()
-for i, imgs in enumerate(tqdm(dataloader)):
-    landmark = imgId2landmarkId[i]
-    lm_proto = proto_sup[landmark, :]
-    lm_eigs = eigs_sup[landmark, :]
-    match, probabilities = MatchDetector(model, imgs[0], lm_proto, lm_eigs, transform, probabilities, spread, threshold, device)
-    frame_prob += [probabilities[-1].cpu().item()]
-    moving_avg_prob += [probabilities.mean().cpu().item()]
-
-    if match:
-        print('\nUpdate to landmark ', str(landmark), ' at frame ', i)
-
-
-# plotting--------------------------------------------------------------------------------------------------------------
-fig = plt.figure(figsize=(16, 8))
-ax = fig.add_subplot(111)
-ax.set_xlabel('Frame number', fontsize=20)
-ax.set_ylabel('Landmark frame probability', fontsize=20)
-ax.plot(frame_prob)
-ax.grid()
-plt.vlines(landmark_borders['start'], 0, 1, 'g', 'dashed')
-plt.vlines(landmark_borders['end'], 0, 1, 'r', 'dashed')
-plt.ylim(0, 1)
-plt.xlim(0, i)
-# plt.show
-plt.savefig(root_dir+'landmark frame probability.png', dpi=300)
-# plt.close()
-
-fig = plt.figure(figsize=(16, 8))
-ax = fig.add_subplot(111)
-ax.set_xlabel('Frame number', fontsize=20)
-ax.set_ylabel('Moving average probability', fontsize=20)
-ax.plot(moving_avg_prob)
-ax.grid()
-plt.vlines(landmark_borders['start'], 0, 1, 'g', 'dashed')
-plt.vlines(landmark_borders['end'], 0, 1, 'r', 'dashed')
-plt.ylim(0, 1)
-plt.xlim(0, i)
-# plt.show
-plt.savefig(root_dir+'Moving average probability.png', dpi=300)
-# plt.close()
-
-print(time() - ts)
+    print(time() - ts)
