@@ -17,9 +17,11 @@ def save_json(path, info, images, annotations, categories):
 if __name__ == '__main__':
     # dataset_root = r'/Volumes/dataset/autonomous-navifation/sorted'
     # dir_output = r'/Users/shidebo/SynologyDrive/Projects/AV/code/coco'
-    #
+
     dataset_root = r'/volume1/dataset/autonomous-navifation/sorted'
-    dir_output = r'/var/services/homes/SDB/Drive/Projects/AV/code/coco'
+    dir_output = r'/var/services/homes/SDB/Drive/Projects/AV/code/coco_debug'
+
+    exclude_locations = ['Bainer2F', 'ASB1F']
 
     info = {
         'description': 'ASB1F',
@@ -36,7 +38,7 @@ if __name__ == '__main__':
         images = []
         annotations = []
         categories = []
-        for dir_location in [i for i in glob(osp.join(dataset_root, '*')) if osp.isdir(i)]:
+        for dir_location in [i for i in glob(osp.join(dataset_root, '*')) if osp.isdir(i) and osp.basename(i) not in exclude_locations]:
             if dataset_type == 'test':
                 cat_id = -1
                 img_id = -1
@@ -45,16 +47,14 @@ if __name__ == '__main__':
                 annotations = []
                 categories = []
             location = osp.basename(dir_location)
-            num_val = 1
+            num_val = 2
             num_test = 1
             num_laps = len([i for i in glob(osp.join(dir_location, '*', '*')) if osp.basename(i) != '@eaDir'])
             num_train = int(num_laps / 2) - num_val - num_test
             for direction in info['directions']:
                 landmark_list = []
                 dir_direction = osp.join(dataset_root, location, direction)
-                laps = [i for i in os.listdir(dir_direction)
-                        if osp.isdir(osp.join(dir_direction, i))
-                        and i != '@eaDir']
+                laps = [i for i in os.listdir(dir_direction) if osp.isdir(osp.join(dir_direction, i)) and i != '@eaDir']
                 laps.sort()
                 if dataset_type == 'train':
                     laps_type = laps[:num_train]

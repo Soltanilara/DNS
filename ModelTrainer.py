@@ -50,12 +50,11 @@ qry_size = 10
 qry_num = 6
 channels, im_height, im_width = 3, 224, 224
 lr = 1e-3
-save_freq = 1
 stats_freq = 1
 sch_param_1 = 20
 sch_param_2 = 0.5
 FC_len = 1000
-course_name = 'all8'
+course_name = '6_exclude_ASB1F_Bainer2F'
 savename = course_name +'_batch' + str(batch) +'_' + str(sup_size) + '-shot_lr_' + str(lr) + '_lrsch_' + str(sch_param_2) + '_' + str(sch_param_1) + '_' + str(n_episodes) + 'episodes'
 print(savename)
 
@@ -85,7 +84,7 @@ from tqdm import trange
 
 
 def ftrain(model, optimizer, dataset_train, dataset_val, sup_size, qry_size, qry_num, max_epoch,
-           epoch_size, accuracy_stats, loss_stats, save_freq, stats_freq, sch_param_1, sch_param_2, batch,
+           epoch_size, accuracy_stats, loss_stats, stats_freq, sch_param_1, sch_param_2, batch,
            acc_first_epoch, loss_first_epoch):
     """
     Trains the StampNet
@@ -112,7 +111,6 @@ def ftrain(model, optimizer, dataset_train, dataset_val, sup_size, qry_size, qry
     while epoch < max_epoch and not stop:
         model.train()
         for episode_batch in trange(epoch_size, desc="Epoch {:d} train".format(epoch + 1)):
-            # loader = RandNegLoader(batch, sup_size, qry_size, qry_num, dataset_train, summarizeSuperCat(dataset_train))
             loader = ConsecLoader(batch, sup_size, qry_size, qry_num, dataset_train, summarizeDataset(dataset_train))
             sample = loader.get_batch()
             optimizer.zero_grad()
@@ -167,7 +165,6 @@ def ftrain(model, optimizer, dataset_train, dataset_val, sup_size, qry_size, qry
 
 # Begin pre-training------------------------------------------------------------------------
 
-# todo: remove device in StampNet and use model(cuda) here. (lose speed?)
 model = load_model(FCdim=FC_len, input_size=qry_num, device=device)
 
 # shows the number of trainable parameters----------------------------------------------
@@ -202,7 +199,7 @@ loss_first_epoch = {
 print(time.time() - ts)
 ftrain(model, optimizer, dataset_train, dataset_val,
        sup_size, qry_size, qry_num, n_epochs, n_episodes,
-       accuracy_stats, loss_stats, save_freq, stats_freq,
+       accuracy_stats, loss_stats, stats_freq,
        sch_param_1, sch_param_2, batch, acc_first_epoch, loss_first_epoch)
 time.time() - ts
 
@@ -289,7 +286,7 @@ print(time.time() - ts)
 
 ftrain(model, optimizer, dataset_train, dataset_val,
        sup_size, qry_size, qry_num, n_epochs, n_episodes,
-       accuracy_stats, loss_stats, save_freq, stats_freq,
+       accuracy_stats, loss_stats, stats_freq,
        sch_param_1, sch_param_2, batch, acc_first_epoch, loss_first_epoch)
 time.time() - ts
 

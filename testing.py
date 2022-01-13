@@ -2,8 +2,6 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from torchvision import transforms, datasets
-import glob
-from PIL import Image
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from time import time
@@ -18,13 +16,8 @@ def LoadModel_LandmarkStats(device, loader, model_path):
     Path landmark image folders are assumed to be under root_dir/landmarks and named as 0, 1, 2, etc.
 
     :param device: device used to store variables and the model
-    :param root_dir: root directory containing the model, as well as the "landmarks" folder
-    :param no_landmarks: number of landmarks; folders named as 0, 1, 2, etc.
+    :param loader: dataloader for landmark
     :param model_path: name of the model to be loaded
-    :param channels: default: 3
-    :param im_height: target height after transformation; default: 224
-    :param im_width: after transformation; default: 224
-    :param transform: composed image transforms
     """
 
     model = torch.load(model_path, map_location='cpu').cuda(device)
@@ -54,7 +47,6 @@ def MatchDetector(model, image, lm_proto, lm_eigs, probabilities, threshold, dev
     :param image: incoming single image frame
     :param lm_proto: mean for the upcoming landmark, indexed from the second output of LoadModel_LandmarkStats(...)
     :param lm_eigs: covariance for the upcoming landmark, indexed from the third output of LoadModel_LandmarkStats(...)
-    :param transform: composed image transforms
     :param probabilities: current probability vector
     :param spread: spread parameter for similarity kernel
     """
@@ -84,14 +76,21 @@ if __name__ == '__main__':
     np.random.seed(0)
     torch.manual_seed(0)
 
-    root_dir = "/home/nick/dataset/all8/"
+    root_dataset = '/home/nick/dataset/all8/'
     model_path = '/home/nick/projects/FSL/ckpt/ModelMCN_all8.pth'
-    coco_path = 'coco/test_ASB_Outside.json'
+    # coco_path_test = 'coco/test_ASB1F.json'
+    # coco_path_landmark = 'coco/test_ASB1F_landmark.json'
+    # coco_path = 'coco/test_Bainer2F.json'
+    # coco_path = 'coco/test_ASB_Outside.json'
+    # coco_path_test = 'coco/test_Facility_outside.json'
+    # coco_path_landmark = 'coco/test_Facility_outside_landmark.json'
+    coco_path_test = 'coco/test_ASB_Outside.json'
+    coco_path_landmark = 'coco/test_ASB_Outside_landmark.json'
 
     device = 1
     channels, im_height, im_width = 3, 224, 224
     threshold = 0.5
-    qry_size = 5
+    qry_size = 10
 
     transform = transforms.Compose([
         transforms.Resize((im_height, im_width)),
@@ -99,13 +98,19 @@ if __name__ == '__main__':
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
     dataset_test = datasets.coco.CocoDetection(
-            root=root_dir,
-            annFile=coco_path,
+            root=root_dataset,
+            annFile=coco_path_test,
             transform=transform
         )
-    dataloader = TestLoader(dataset_test, summarizeDataset(dataset_test))
+    dataset_landmark = datasets.coco.CocoDetection(
+            root=root_dataset,
+            annFile=coco_path_landmark,
+            transform=transform
+        )
+    dataloader_test = TestLoader(dataset_test, summarizeDataset(dataset_test))
+    dataloader_landmark = TestLoader(dataset_landmark, summarizeDataset(dataset_test))
 
-    model, proto_sup, eigs_sup = LoadModel_LandmarkStats(device, dataloader, model_path)
+    model, proto_sup, eigs_sup = LoadModel_LandmarkStats(device, dataloader_landmark, model_path)
 
     landmark = 0
     i = 0
@@ -149,7 +154,7 @@ if __name__ == '__main__':
     plt.ylim(0, 1)
     plt.xlim(0, i)
     # plt.show
-    plt.savefig(root_dir+'landmark frame probability.png', dpi=300)
+    plt.savefig(root_dataset + 'landmark frame probability.png', dpi=300)
     # plt.close()
 
     fig = plt.figure(figsize=(16, 8))
@@ -163,7 +168,7 @@ if __name__ == '__main__':
     plt.ylim(0, 1)
     plt.xlim(0, i)
     # plt.show
-    plt.savefig(root_dir+'Moving average probability.png', dpi=300)
+    plt.savefig(root_dataset + 'Moving average probability.png', dpi=300)
     # plt.close()
 
     print(time() - ts)

@@ -62,9 +62,6 @@ class StampNet(nn.Module):
         x_support = sample_images[:, :sup_size]
         x_query = sample_images[:, sup_size:]
 
-        # target indices are 0 ... n_way-1
-        # target_inds = torch.arange(0, 2).view(1, n_way, 1, 1).expand(batch, n_way, qry_size, 1).long()
-
         # concatenate and prepare images of the support and query sets for inputting to the network
         x = torch.cat([x_support.contiguous().view(batch * sup_size, *x_support.size()[-3:]),
                        x_query.contiguous().view(batch * qry_num * qry_size, *x_query.size()[-3:])], 0)
@@ -81,9 +78,6 @@ class StampNet(nn.Module):
         proto_qry = torch.mean(proto_qry, 2)
         eigs_qry = torch.mean(eigs_qry, 2)
 
-        # proto_qry = proto_qry.view(batch, qry_num * qry_size, -1)
-        # eigs_qry = eigs_qry.view(batch, qry_num * qry_size, -1)
-
         proto_sup = proto_sup.view(batch, 1, -1).expand(-1, qry_num, -1)
         eigs_sup = eigs_sup.view(batch, 1, -1).expand(-1, qry_num, -1)
 
@@ -96,9 +90,6 @@ class StampNet(nn.Module):
         loss = nn.BCELoss()
         loss_val = loss(pred, target_inds)
 
-        # loss_val = -log_p_y.gather(3, target_inds).squeeze().view(
-        #     -1).mean()  # sum negative log softmax for the correct class, normalize by number of entries
-        # _, y_hat = log_p_y.max(3)
         acc_val = torch.eq(pred_label, target_inds).float().mean()
         acc_means = torch.eq(pred_label, target_inds).view(batch, -1).float().mean(1)
         #

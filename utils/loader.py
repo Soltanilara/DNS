@@ -1,46 +1,6 @@
-from random import randint
 import numpy as np
 import torch
-from torch.utils.data import WeightedRandomSampler, DataLoader, Subset
-
-
-# class RandNegLoader:
-#     def __init__(self, batch, n_way, n_support, n_query, dataset, targets, train):
-#         self.batch = batch
-#         self.n_way = n_way
-#         self.dataset = dataset
-#         self.n_class_tot = len(dataset.classes)
-#         self.n_data_tot = len(dataset)
-#         self.n_support = n_support
-#         self.n_query = n_query
-#         self.targets = targets
-#
-#     def get_sample(self):
-#         sample = torch.empty([0, self.n_support + self.n_query] + list(self.dataset[0][0].shape))
-#         k = np.random.choice(np.unique(range(np.floor(self.n_class_tot/2).astype(int))), 1, replace=False).item()
-#         for i, cls in enumerate([2 * k, 2 * k + 1]):
-#             if i == 0:
-#                 weights = list(map(int, [x == y for (x, y) in zip(self.targets, [cls] * self.n_data_tot)]))
-#             else:
-#                 weights = list(map(int, [x != y for (x, y) in zip(self.targets, [cls - 1] * self.n_data_tot)]))
-#             sampler = WeightedRandomSampler(weights, self.n_support + self.n_query, replacement=False)
-#             loader = DataLoader(dataset=self.dataset, shuffle=False, batch_size=self.n_support + self.n_query,
-#                                 sampler=sampler, drop_last=False)  # , batch_size = n_support+n_query
-#             sample_cls = next(iter(loader))[0].unsqueeze(dim=0)
-#             sample = torch.cat([sample, sample_cls], dim=0)
-#         return sample
-#
-#     def get_batch(self):
-#         sample_batch = torch.empty([self.batch, self.n_way, self.n_support + self.n_query] + list(self.dataset[0][0].shape))
-#         for b in range(self.batch):
-#             sample_batch[b] = self.get_sample()
-#         return ({
-#             'images': sample_batch,
-#             'batch': self.batch,
-#             'n_way': self.n_way,
-#             'n_support': self.n_support,
-#             'n_query': self.n_query
-#         })
+from torch.utils.data import DataLoader, Subset
 
 
 class ConsecLoader:
@@ -57,7 +17,7 @@ class ConsecLoader:
     def get_sample(self, cls):
         label = []
 
-        # sample support set
+        # sample a support set
         cat = self.dataset.coco.loadCats(cls)[0]
         sup_img_ids = sorted(self.dataset.coco.getImgIds(catIds=cls))
         sup_l = 0 if len(sup_img_ids) <= self.sup_size else np.random.randint(max(len(sup_img_ids) - self.sup_size, 1))
@@ -66,9 +26,9 @@ class ConsecLoader:
                                 pin_memory=False, drop_last=False)
         sample = next(iter(loader_sup))[0]
 
-        # sample laps without replacement and sample a positive query set from each
+        # select laps with/without replacement and sample a positive query set from each
         laps_direction = self.location2Lap[cat['location']][cat['direction']]
-        laps = list(np.random.choice(list(laps_direction), min(2, int(self.qry_num / 2)), replace=True))
+        laps = list(np.random.choice(list(laps_direction), int(self.qry_num/2), replace=True))
         for lap in laps:
             catId = [i for i in self.lap2CatId[lap] if self.dataset.coco.loadCats(i)[0]['name'] == cat['name']][0]
             qry_img_ids = self.dataset.coco.getImgIds(catIds=catId)
@@ -82,8 +42,8 @@ class ConsecLoader:
             sample = torch.cat([sample, sample_qry], dim=0)
             label.append(1.)
 
-        # sample laps without replacement and sample a negative query set from each
-        laps = list(np.random.choice(list(laps_direction), self.qry_num - min(2, int(self.qry_num / 2)), replace=True))
+        # select laps with/without replacement and sample a negative query set from each
+        laps = list(np.random.choice(list(laps_direction), self.qry_num-int(self.qry_num/2), replace=True))
         for lap in laps:
             catId_pos = [i for i in self.lap2CatId[lap] if self.dataset.coco.loadCats(i)[0]['name'] == cat['name']][0]
             pos_imgIds = self.dataset.coco.getImgIds(catIds=catId_pos)
