@@ -25,7 +25,8 @@ def load_model(**kwargs):
     )
 
     classifier = nn.Sequential(
-        nn.Linear(FCdim, 100),
+        nn.Linear(1, 100),
+        nn.ReLU(),
         nn.Linear(100, 1),
         nn.Sigmoid()
     )
@@ -82,7 +83,8 @@ class StampNet(nn.Module):
         eigs_sup = eigs_sup.view(batch, 1, -1).expand(-1, qry_num, -1)
 
         diff = proto_sup - proto_qry
-        dists = (diff / (eigs_sup + eigs_qry)).view(batch * qry_num, -1) * diff.view(batch * qry_num, -1)
+        dists = torch.sum((diff / (eigs_sup + eigs_qry)).view(batch * qry_num, -1) * diff.view(batch * qry_num, -1),
+                          dim=1).unsqueeze(dim=1)
 
         pred = self.classifier(dists).view(batch, qry_num)
         pred_label = torch.round(pred)
@@ -92,7 +94,7 @@ class StampNet(nn.Module):
 
         acc_val = torch.eq(pred_label, target_inds).float().mean()
         acc_means = torch.eq(pred_label, target_inds).view(batch, -1).float().mean(1)
-        #
+
         return loss_val, {
             'loss': loss_val.item(),
             'acc': acc_val.item(),

@@ -12,6 +12,8 @@ from torchvision import transforms, datasets
 import csv
 import time
 from collections import OrderedDict
+import json
+from tqdm import tqdm
 
 from models.StampNet import load_model
 from utils.loader import RandNegLoader, ConsecLoader
@@ -54,7 +56,7 @@ stats_freq = 1
 sch_param_1 = 20
 sch_param_2 = 0.5
 FC_len = 1000
-course_name = '6_exclude_ASB1F_Bainer2F'
+course_name = '6_exclude_ASB1F_Bainer2F_dist'
 savename = course_name +'_batch' + str(batch) +'_' + str(sup_size) + '-shot_lr_' + str(lr) + '_lrsch_' + str(sch_param_2) + '_' + str(sch_param_1) + '_' + str(n_episodes) + 'episodes'
 print(savename)
 
@@ -110,7 +112,9 @@ def ftrain(model, optimizer, dataset_train, dataset_val, sup_size, qry_size, qry
 
     while epoch < max_epoch and not stop:
         model.train()
-        for episode_batch in trange(epoch_size, desc="Epoch {:d} train".format(epoch + 1)):
+        bar = tqdm(range(epoch_size), desc="Epoch {:d} train".format(epoch + 1))
+        # for episode_batch in trange(epoch_size, desc="Epoch {:d} train".format(epoch + 1)):
+        for episode_batch in bar:
             loader = ConsecLoader(batch, sup_size, qry_size, qry_num, dataset_train, summarizeDataset(dataset_train))
             sample = loader.get_batch()
             optimizer.zero_grad()
@@ -122,6 +126,10 @@ def ftrain(model, optimizer, dataset_train, dataset_val, sup_size, qry_size, qry
             optimizer.step()
             loss_stats['train'].append(running_loss)
             accuracy_stats['train'].append(running_acc)
+            bar.set_postfix({
+                'Loss': running_loss,
+                'Acc': running_acc
+            })
             if epoch == 0:
                 acc_first_epoch['train'].append(running_acc)
                 loss_first_epoch['train'].append(running_loss)
@@ -136,13 +144,19 @@ def ftrain(model, optimizer, dataset_train, dataset_val, sup_size, qry_size, qry
             running_loss = 0.0
             running_acc = 0.0
             model.eval()
-            for _ in trange(epoch_size, desc="Epoch {:d} val".format(epoch)):
+            bar = tqdm(range(epoch_size), desc="Epoch {:d} val".format(epoch))
+            # for _ in trange(epoch_size, desc="Epoch {:d} val".format(epoch)):
+            for _ in bar:
                 # loader = RandNegLoader(batch, sup_size, qry_size, qry_num, dataset_val, summarizeSuperCat(dataset_val))
                 loader = ConsecLoader(batch, sup_size, qry_size, qry_num, dataset_val, summarizeDataset(dataset_val))
                 sample = loader.get_batch()
                 loss, output = model.set_forward_loss(sample)
                 running_loss += float(output['loss'])
                 running_acc += float(output['acc'])
+                bar.set_postfix({
+                    'Loss': output['loss'],
+                    'Acc': output['acc']
+                })
             epoch_loss = running_loss / epoch_size
             epoch_acc = running_acc / epoch_size
             loss_stats['val'].append(epoch_loss)
@@ -291,7 +305,6 @@ ftrain(model, optimizer, dataset_train, dataset_val,
 time.time() - ts
 
 # torch.save(model, 'model_' + savename + '.pth')
-
 
 train_acc_df = pd.DataFrame.from_dict(accuracy_stats['train']).reset_index().melt(id_vars=['index']).rename(
     columns={"index": "Batches"})
