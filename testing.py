@@ -5,9 +5,11 @@ from torchvision import transforms, datasets
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from time import time
+import plotly.express as px
+import json
 
 from utils.loader import TestLoader
-from utils.utils import summarizeDataset, get_imgId2landmarkId
+from utils.utils import summarizeDataset, get_imgId2landmarkId, gen_6_proto
 
 
 def LoadModel_LandmarkStats(device, loader, model_path):
@@ -21,19 +23,21 @@ def LoadModel_LandmarkStats(device, loader, model_path):
     """
 
     model = torch.load(model_path, map_location='cpu').cuda(device)
+    model.eval()
     for param in model.parameters():
         param.requires_grad = False
     landmarks = loader.get_all_landmarks()
+    landmarks = gen_6_proto(landmarks)
     num_landmarks = landmarks.shape[0]
     landmarks = landmarks.view([-1] + list(landmarks.shape)[-3:]).cuda(device)
     indiv_protos = model.encoder(landmarks)
     indiv_eigs = model.cov(indiv_protos) + 1e-8
 
-    indiv_protos = indiv_protos.view([num_landmarks, -1] + [indiv_protos.shape[-1]])
-    indiv_eigs = indiv_eigs.view([num_landmarks, -1] + [indiv_eigs.shape[-1]])
+    indiv_protos = indiv_protos.view([num_landmarks, 6, 10] + [indiv_protos.shape[-1]])
+    indiv_eigs = indiv_eigs.view([num_landmarks, 6, 10] + [indiv_eigs.shape[-1]])
 
-    proto_sup = torch.mean(indiv_protos, dim=1).squeeze()
-    eigs_sup = torch.mean(indiv_eigs, dim=1).squeeze()
+    proto_sup = torch.mean(indiv_protos, dim=2).squeeze()
+    eigs_sup = torch.mean(indiv_eigs, dim=2).squeeze()
 
     return model, proto_sup, eigs_sup
 
@@ -50,8 +54,6 @@ def MatchDetector(model, image, lm_proto, lm_eigs, probabilities, threshold, dev
     :param probabilities: current probability vector
     :param spread: spread parameter for similarity kernel
     """
-    lm_proto = lm_proto
-    lm_eigs = lm_eigs
     qry_proto = model.encoder(image.cuda(device)).squeeze()
     qry_eigs = model.cov(qry_proto).squeeze() + 1e-8
     qry_proto = torch.mean(qry_proto, dim=0)
@@ -61,6 +63,7 @@ def MatchDetector(model, image, lm_proto, lm_eigs, probabilities, threshold, dev
     dist = diff / (qry_eigs + lm_eigs) * diff
 
     prob = model.classifier(dist)
+    prob = torch.max(prob).unsqueeze(dim=0)
     probabilities = torch.cat([probabilities[1:], prob], 0)
     if torch.mean(probabilities) > threshold:
         match = True
@@ -77,15 +80,23 @@ if __name__ == '__main__':
     torch.manual_seed(0)
 
     root_dataset = '/home/nick/dataset/all8/'
-    model_path = '/home/nick/projects/FSL/ckpt/ModelMCN_all8.pth'
+    # model_path = '/home/nick/projects/FSL/ckpt/ModelMCN_all8.pth'
+    # model_path = '/home/nick/projects/FSL/ckpt/ModelMCN_6_exclude_ASB1F_Bainer2F_relu.pth'
+    # model_path = '/home/nick/projects/FSL/ckpt/ModelMCN_6_exclude_Bainer2F_ASB_Outside_1000_100_10.pth'
+    model_path = '/home/nick/projects/FSL/ckpt/ModelMCN_6_exclude_Bainer2F_ASB_Outside_1000_100_10_aug.pth'
     # coco_path_test = 'coco/test_ASB1F.json'
     # coco_path_landmark = 'coco/test_ASB1F_landmark.json'
-    # coco_path = 'coco/test_Bainer2F.json'
-    # coco_path = 'coco/test_ASB_Outside.json'
+    # coco_path_test = 'coco/test_Bainer2F.json'
+    # coco_path_landmark = 'coco/test_Bainer2F_landmark.json'
+    # coco_path_test = 'coco/test_ASB_Outside.json'
+    # coco_path_landmark = 'coco/test_ASB_Outside_landmark.json'
     # coco_path_test = 'coco/test_Facility_outside.json'
     # coco_path_landmark = 'coco/test_Facility_outside_landmark.json'
-    coco_path_test = 'coco/test_ASB_Outside.json'
-    coco_path_landmark = 'coco/test_ASB_Outside_landmark.json'
+
+    coco_path_test = 'coco_0125/test_ASB1F_New.json'
+    coco_path_landmark = 'coco_0125/test_ASB1F_New_landmark.json'
+    # coco_path_test = 'coco_0125/test_ASB1F.json'
+    # coco_path_landmark = 'coco_0125/test_ASB1F_landmark.json'
 
     device = 1
     channels, im_height, im_width = 3, 224, 224
@@ -117,6 +128,8 @@ if __name__ == '__main__':
     frame_prob = []
     moving_avg_prob = []
     qry_imgs = None
+    # TODO use window size between 3 and 6
+    # probabilities = torch.zeros([3, 6], requires_grad=False).cuda(device)
     probabilities = torch.zeros(15, requires_grad=False).cuda(device)
     imgId2landmarkId, landmark_borders = get_imgId2landmarkId(dataset_test)
     dataloader = DataLoader(dataset=dataset_test, shuffle=False, batch_size=1, pin_memory=False, drop_last=False)
@@ -172,3 +185,12 @@ if __name__ == '__main__':
     # plt.close()
 
     print(time() - ts)
+
+    plot_data = {
+        'landmark_borders': landmark_borders,
+        'frame_prob': frame_prob,
+        'moving_avg_prob': moving_avg_prob
+    }
+    with open(root_dataset + 'plot_data.json', 'w') as f:
+        json.dump(plot_data, f)
+    print('Plot data saved')

@@ -24,10 +24,22 @@ def load_model(**kwargs):
         nn.Softplus()
     )
 
+    # classifier = nn.Sequential(
+    #     nn.Linear(FCdim, FCdim),
+    #     nn.ELU(),
+    #     nn.Linear(FCdim, 100),
+    #     nn.ELU(),
+    #     nn.Linear(100, 1),
+    #     nn.Sigmoid()
+    # )
     classifier = nn.Sequential(
-        nn.Linear(1, 100),
-        nn.ReLU(),
-        nn.Linear(100, 1),
+        nn.Linear(FCdim, FCdim),
+        nn.ELU(),
+        nn.Linear(FCdim, 100),
+        nn.ELU(),
+        nn.Linear(100, 10),
+        nn.ELU(),
+        nn.Linear(10, 1),
         nn.Sigmoid()
     )
 
@@ -83,8 +95,7 @@ class StampNet(nn.Module):
         eigs_sup = eigs_sup.view(batch, 1, -1).expand(-1, qry_num, -1)
 
         diff = proto_sup - proto_qry
-        dists = torch.sum((diff / (eigs_sup + eigs_qry)).view(batch * qry_num, -1) * diff.view(batch * qry_num, -1),
-                          dim=1).unsqueeze(dim=1)
+        dists = (diff / (eigs_sup + eigs_qry)).view(batch * qry_num, -1) * diff.view(batch * qry_num, -1)
 
         pred = self.classifier(dists).view(batch, qry_num)
         pred_label = torch.round(pred)
