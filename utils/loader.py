@@ -46,16 +46,11 @@ class ConsecLoader:
         laps = list(np.random.choice(list(laps_direction), self.qry_num-int(self.qry_num/2), replace=True))
         for lap in laps:
             catId_pos = [i for i in self.lap2CatId[lap] if self.dataset.coco.loadCats(i)[0]['name'] == cat['name']][0]
-            pos_imgIds = self.dataset.coco.getImgIds(catIds=catId_pos)
+            imgIds = self.dataset.coco.getImgIds(catIds=catId_pos-1)
 
-            lap_catIds = self.lap2CatId[lap]
-            lap_imgIds = []
-            for catId in lap_catIds:
-                lap_imgIds.extend(self.dataset.coco.getImgIds(catIds=catId))
-            qry_ls = [i for i in range(0, pos_imgIds[0] - self.qry_size)] + \
-                     [i for i in range(pos_imgIds[-1], lap_imgIds[-1] - self.qry_size)]
+            qry_ls = range(min(imgIds[0], imgIds[-1]-self.qry_size), imgIds[-1]+1)
             qry_l = np.random.choice(qry_ls)
-            inds_qry = [i for i in range(qry_l, qry_l + self.qry_size)]
+            inds_qry = [i for i in range(qry_l, qry_l+self.qry_size)]
 
             loader_qry = DataLoader(dataset=Subset(self.dataset, inds_qry), shuffle=False, batch_size=self.qry_size,
                                     pin_memory=False, drop_last=False)
@@ -66,7 +61,7 @@ class ConsecLoader:
         return sample, label
 
     def get_batch(self):
-        sample_batch = torch.empty([self.batch, self.sup_size + self.qry_size * self.qry_num] + list(self.dataset[0][0].shape))
+        sample_batch = torch.empty([self.batch, self.sup_size+self.qry_size*self.qry_num]+list(self.dataset[0][0].shape))
         labels = []
         cls = np.random.choice(self.PN2CatId['positive'], self.batch, replace=True)
         for b, c in zip(range(self.batch), cls):
