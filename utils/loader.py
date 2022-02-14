@@ -13,6 +13,7 @@ class ConsecLoader:
         self.lap2CatId = summary['lap2CatId']
         self.PN2CatId = summary['PN2CatId']
         self.location2Lap = summary['location2Lap']
+        self.catId2Prob = summary['catId2Prob']
 
     def get_sample(self, cls):
         label = []
@@ -46,10 +47,18 @@ class ConsecLoader:
         laps = list(np.random.choice(list(laps_direction), self.qry_num-int(self.qry_num/2), replace=True))
         for lap in laps:
             catId_pos = [i for i in self.lap2CatId[lap] if self.dataset.coco.loadCats(i)[0]['name'] == cat['name']][0]
-            imgIds = self.dataset.coco.getImgIds(catIds=catId_pos-1)
+            catId_neg = catId_pos - 1
+            imgIds = self.dataset.coco.getImgIds(catIds=catId_neg)
 
-            qry_ls = range(min(imgIds[0], imgIds[-1]-self.qry_size), imgIds[-1]+1)
-            qry_l = np.random.choice(qry_ls)
+            if imgIds[-1]-self.qry_size > imgIds[0]:
+                imgId_l = imgIds[0]
+                prob = self.catId2Prob[catId_neg]
+            else:
+                imgId_l = imgIds[-1] - self.qry_size
+                prob = [i for i in range(imgIds[-1]-imgId_l+1)]
+                prob /= np.sum(prob)
+            qry_ls = range(imgId_l, imgIds[-1]+1)
+            qry_l = np.random.choice(qry_ls, p=prob)
             inds_qry = [i for i in range(qry_l, qry_l+self.qry_size)]
 
             loader_qry = DataLoader(dataset=Subset(self.dataset, inds_qry), shuffle=False, batch_size=self.qry_size,
