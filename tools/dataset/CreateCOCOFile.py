@@ -5,6 +5,8 @@ from glob import glob
 
 
 def save_json(path, info, images, annotations, categories):
+    if not osp.exists(osp.dirname(path)):
+        os.makedirs(osp.dirname(path))
     with open(path, 'w') as f:
         json.dump({
             'info': info,
@@ -18,20 +20,26 @@ if __name__ == '__main__':
     # dataset_root = r'/Volumes/dataset/autonomous-navifation/sorted'
     # dir_output = r'/Users/shidebo/SynologyDrive/Projects/AV/code/coco'
 
-    dataset_root = r'/volume1/dataset/autonomous-navifation/sorted'
-    dir_output = r'/var/services/homes/SDB/Drive/Projects/AV/code/coco_debug'
+    dataset_root = r'/volume1/dataset/av/sorted'
+    dir_output = r'/var/services/homes/SDB/Drive/Projects/AV/code/coco/coco_indoor_exclude_Bainer2F_Kemper3F'
 
-    exclude_locations = ['Bainer2F', 'ASB1F']
+    exclude_locations = [
+        'Bainer2F', 'Kemper3F',
+        'ASB_Outside', 'Facility_outside', 'ASB_Outside', 'Math_outside'
+    ]
+    # exclude_locations = []
 
     info = {
-        'description': 'ASB1F',
+        'description': 'Exclude:' + str(exclude_locations),
         'directions': ['cw', 'ccw'],
         'num_landmark': 8,
         'img_shape': [320, 240],
         'num_cats': 0
     }
 
-    for dataset_type in ['train', 'val', 'test']:
+    # for dataset_type in ['train', 'val', 'test', 'landmark']:
+    # for dataset_type in ['test', 'landmark']:
+    for dataset_type in ['train', 'val']:
         cat_id = -1
         img_id = -1
         ann_id = -1
@@ -39,7 +47,7 @@ if __name__ == '__main__':
         annotations = []
         categories = []
         for dir_location in [i for i in glob(osp.join(dataset_root, '*')) if osp.isdir(i) and osp.basename(i) not in exclude_locations]:
-            if dataset_type == 'test':
+            if dataset_type in ['test', 'landmark']:
                 cat_id = -1
                 img_id = -1
                 ann_id = -1
@@ -47,9 +55,9 @@ if __name__ == '__main__':
                 annotations = []
                 categories = []
             location = osp.basename(dir_location)
-            num_val = 2
-            num_test = 1
             num_laps = len([i for i in glob(osp.join(dir_location, '*', '*')) if osp.basename(i) != '@eaDir'])
+            num_val = 2 if num_laps > 8 else 1
+            num_test = 1
             num_train = int(num_laps / 2) - num_val - num_test
             for direction in info['directions']:
                 landmark_list = []
@@ -60,8 +68,12 @@ if __name__ == '__main__':
                     laps_type = laps[:num_train]
                 elif dataset_type == 'val':
                     laps_type = laps[num_train:num_train+num_val]
-                else:
+                elif dataset_type == 'test':
                     laps_type = laps[num_train+num_val:]
+                else:
+                    laps_type = laps[num_train+num_val-1]
+                    if not isinstance(laps_type, list):
+                        laps_type = [laps_type]
 
                 print('Creating dataset: {}, location: {}, direction: {}, num_lap: {}'.format(dataset_type, location, direction, len(laps_type)))
 
@@ -103,6 +115,8 @@ if __name__ == '__main__':
                             annotations.append(ann)
             if dataset_type == 'test':
                 save_json(osp.join(dir_output, dataset_type + '_' + location + '.json'), info, images, annotations, categories)
+            elif dataset_type == 'landmark':
+                save_json(osp.join(dir_output, 'test_' + location + '_landmark' + '.json'), info, images, annotations, categories)
 
-        if dataset_type != 'test':
+        if dataset_type not in ['test', 'landmark']:
             save_json(osp.join(dir_output, dataset_type + '.json'), info, images, annotations, categories)

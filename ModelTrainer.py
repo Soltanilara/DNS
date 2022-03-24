@@ -1,4 +1,5 @@
 import os
+import random
 import sys
 
 import numpy as np
@@ -30,23 +31,52 @@ torch.manual_seed(0)
 if sys.platform == 'linux':
     # root_dir = "/home/nick/dataset/outside/"
     # root_dir = "/home/nick/dataset/val_from_train/"
-    root_dir = "/home/nick/dataset/all8/"
+    root_dir = "/home/nick/dataset/all/"
     # root_dir = "/home/nick/dataset/ASB1F_V1/"
     # root_dir = "/mnt/data/dataset/av/outside/"
 else:
     # root_dir = '/Users/shidebo/dataset/AV/Sorted/ASB1F'
     root_dir = '/Users/shidebo/dataset/AV/Sorted/'
 
-transform = transforms.Compose([
+transform_train = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.RandomApply([transforms.RandomRotation(degrees=10)], p=0.5),
+    transforms.RandomApply([transforms.GaussianBlur(kernel_size=(5, 15))], p=0.5),
+    transforms.RandomApply([
+        transforms.CenterCrop(size=random.randint(200, 224)),
+        transforms.Resize((224, 224))], p=0.3),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+])
+transform_train_light = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.RandomApply([transforms.RandomRotation(degrees=10)], p=0.3),
+    transforms.RandomApply([transforms.GaussianBlur(kernel_size=(5, 15))], p=0.3),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+])
+transform_train_light_crop = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.RandomApply([transforms.RandomRotation(degrees=10)], p=0.3),
+    transforms.RandomApply([transforms.GaussianBlur(kernel_size=(5, 15))], p=0.3),
+    transforms.RandomApply([
+        transforms.CenterCrop(size=random.randint(200, 224)),
+        transforms.Resize((224, 224))], p=0.3),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+])
+transform_val = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
 
-device = 0 if torch.cuda.is_available() else "cpu"  # use GPU if available
-n_epochs = 40
+device = 3 if torch.cuda.is_available() else "cpu"  # use GPU if available
+n_epochs_pre = 3
+n_epochs_fine = 40
 n_episodes = 16
-batch = 32
+batch_pre = 16
+batch_fine = 3
 sup_size = 10
 qry_size = 10
 qry_num = 6
@@ -56,28 +86,21 @@ stats_freq = 1
 sch_param_1 = 20
 sch_param_2 = 0.5
 FC_len = 1000
-course_name = '6_exclude_ASB1F_Bainer2F_dist'
-savename = course_name +'_batch' + str(batch) +'_' + str(sup_size) + '-shot_lr_' + str(lr) + '_lrsch_' + str(sch_param_2) + '_' + str(sch_param_1) + '_' + str(n_episodes) + 'episodes'
+course_name = '5_exclude_Bainer2F_Kemper3F_batch_3_neg_50_aug_light_crop'
+savename = course_name +'_batch' + str(batch_pre) + '_' + str(sup_size) + '-shot_lr_' + str(lr) + '_lrsch_' + str(sch_param_2) + '_' + str(sch_param_1) + '_' + str(n_episodes) + 'episodes'
 print(savename)
-
-
-# Old dataset
-# dataset = datasets.ImageFolder(root=root_dir + "train", transform=transform) #"train" folder contains image subfolders for positive and negative landmark images
-# sortImgs(dataset)
-# targets = [s[1] for s in dataset.samples]
-#
-# dataset_val = datasets.ImageFolder(root=root_dir + "val", transform=transform)
-# targets_val = [s[1] for s in dataset_val.samples]
 
 dataset_train = datasets.coco.CocoDetection(
     root=root_dir,
-    annFile='coco/train.json',
-    transform=transform
+    # annFile='coco/exclude_Bainer2F_ASB_Outside/train.json',
+    annFile='/home/nick/projects/FSL/coco/exclude_Bainer2F_Kemper3F/train.json',
+    transform=transform_train_light_crop
 )
 dataset_val = datasets.coco.CocoDetection(
     root=root_dir,
-    annFile='coco/val.json',
-    transform=transform
+    # annFile='coco/exclude_Bainer2F_ASB_Outside/val.json',
+    annFile='coco/exclude_Bainer2F_Kemper3F/val.json',
+    transform=transform_val
 )
 
 
@@ -109,13 +132,14 @@ def ftrain(model, optimizer, dataset_train, dataset_val, sup_size, qry_size, qry
     stop = False  # status to know when to stop
     best_acc = 0
     model_best_path = ''
+    dataset_summary = summarizeDataset(dataset_train)
 
     while epoch < max_epoch and not stop:
         model.train()
         bar = tqdm(range(epoch_size), desc="Epoch {:d} train".format(epoch + 1))
         # for episode_batch in trange(epoch_size, desc="Epoch {:d} train".format(epoch + 1)):
         for episode_batch in bar:
-            loader = ConsecLoader(batch, sup_size, qry_size, qry_num, dataset_train, summarizeDataset(dataset_train))
+            loader = ConsecLoader(batch, sup_size, qry_size, qry_num, dataset_train, dataset_summary)
             sample = loader.get_batch()
             optimizer.zero_grad()
 
@@ -212,9 +236,9 @@ loss_first_epoch = {
 
 print(time.time() - ts)
 ftrain(model, optimizer, dataset_train, dataset_val,
-       sup_size, qry_size, qry_num, n_epochs, n_episodes,
+       sup_size, qry_size, qry_num, n_epochs_pre, n_episodes,
        accuracy_stats, loss_stats, stats_freq,
-       sch_param_1, sch_param_2, batch, acc_first_epoch, loss_first_epoch)
+       sch_param_1, sch_param_2, batch_pre, acc_first_epoch, loss_first_epoch)
 time.time() - ts
 
 # torch.save(model, 'model_' + savename + '.pth')
@@ -241,7 +265,7 @@ sns.lineplot(data=train_loss_df, x="Batches", y="value", hue="variable", ax=axes
 sns.lineplot(data=val_loss_df, x="Epochs", y="value", hue="variable", ax=axes[1, 1], legend=False,
              palette=['red']).set_title(
     'Validation loss vs epoch')
-fig.savefig('Loss Acc ' + str(n_epochs) + ' epochs ' + savename + '.png')
+fig.savefig('Loss Acc ' + str(n_epochs_pre) + ' epochs ' + savename + '.png')
 
 train_first_epoch_acc_df = pd.DataFrame.from_dict(acc_first_epoch).reset_index().melt(id_vars=['index']).rename(
     columns={"index": "Batches"})
@@ -252,13 +276,14 @@ sns.lineplot(data=train_first_epoch_acc_df, x="Batches", y="value", hue="variabl
     'Training accuracy vs batch for the first epoch')
 sns.lineplot(data=train_first_epoch_loss_df, x="Batches", y="value", hue="variable", ax=axes[1]).set_title(
     'Training loss vs batch for the first epoch')
-fig.savefig('Epoch 1 ' + str(n_epochs) + ' epochs ' + savename + '.png')
+fig.savefig('Epoch 1 ' + str(n_epochs_pre) + ' epochs ' + savename + '.png')
 #-----------------------------------------------------------------------------------------------------------------------
 
-acc_list = accuracy_stats['val']
-max_value = max(acc_list)
-max_index = acc_list.index(max_value)
-print(max_index+1) #prints the epoch number of pre-trained model with max accuracy
+if n_epochs_pre > 0:
+    acc_list = accuracy_stats['val']
+    max_value = max(acc_list)
+    max_index = acc_list.index(max_value)
+    print(max_index+1) #prints the epoch number of pre-trained model with max accuracy
 
 # model = torch.load('ckpt/model_best_' + str(max_index+1) + '_epochs_' + savename + '.pth').cuda(device) #loads the model with highest validation accuracy
 model = torch.load('ckpt/model_best_' + savename + '.pth').cuda(device) #loads the model with highest validation accuracy
@@ -266,9 +291,8 @@ model = torch.load('ckpt/model_best_' + savename + '.pth').cuda(device) #loads t
 ## Begin fine-tuning----------------------------------------------------------------------------------------------------------
 
 n_episodes = 100
-batch = 4
 lr = 1e-5
-savename = course_name +'_FineTune_NewMix_SymMah_batch' + str(batch) +'_' + str(sup_size) + '-shot' + '_lr_' + str(lr) + '_lrsch_' + str(sch_param_2) + '_' + str(sch_param_1) + '_' + str(n_episodes) + 'episodes'
+savename = course_name +'_FineTune_NewMix_SymMah_batch' + str(batch_fine) +'_' + str(sup_size) + '-shot' + '_lr_' + str(lr) + '_lrsch_' + str(sch_param_2) + '_' + str(sch_param_1) + '_' + str(n_episodes) + 'episodes'
 print(savename)
 
 for param in model.parameters():
@@ -299,9 +323,9 @@ loss_first_epoch = {
 print(time.time() - ts)
 
 ftrain(model, optimizer, dataset_train, dataset_val,
-       sup_size, qry_size, qry_num, n_epochs, n_episodes,
+       sup_size, qry_size, qry_num, n_epochs_fine, n_episodes,
        accuracy_stats, loss_stats, stats_freq,
-       sch_param_1, sch_param_2, batch, acc_first_epoch, loss_first_epoch)
+       sch_param_1, sch_param_2, batch_fine, acc_first_epoch, loss_first_epoch)
 time.time() - ts
 
 # torch.save(model, 'model_' + savename + '.pth')
@@ -327,7 +351,7 @@ sns.lineplot(data=train_loss_df, x="Batches", y="value", hue="variable", ax=axes
 sns.lineplot(data=val_loss_df, x="Epochs", y="value", hue="variable", ax=axes[1, 1], legend=False,
              palette=['red']).set_title(
     'Validation loss vs epoch')
-fig.savefig('Loss Acc ' + str(n_epochs) + ' epochs ' + savename + '.png')
+fig.savefig('Loss Acc ' + str(n_epochs_fine) + ' epochs ' + savename + '.png')
 
 train_first_epoch_acc_df = pd.DataFrame.from_dict(acc_first_epoch).reset_index().melt(id_vars=['index']).rename(
     columns={"index": "Batches"})
@@ -338,7 +362,7 @@ sns.lineplot(data=train_first_epoch_acc_df, x="Batches", y="value", hue="variabl
     'Training accuracy vs batch for the first epoch')
 sns.lineplot(data=train_first_epoch_loss_df, x="Batches", y="value", hue="variable", ax=axes[1]).set_title(
     'Training loss vs batch for the first epoch')
-fig.savefig('Epoch 1 ' + str(n_epochs) + ' epochs ' + savename + '.png')
+fig.savefig('Epoch 1 ' + str(n_epochs_fine) + ' epochs ' + savename + '.png')
 
 acc_list = accuracy_stats['val']
 max_value = max(acc_list)

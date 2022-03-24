@@ -1,3 +1,5 @@
+import numpy as np
+import torch
 from torchvision.datasets import CocoDetection
 
 
@@ -43,6 +45,7 @@ def summarizeDataset(dataset: CocoDetection):
         'positive': [],
         'negative': [],
     }
+    catId2Prob = {}
     cats = dataset.coco.loadCats(dataset.coco.getCatIds())
     for cat in cats:
         catId = cat['id']
@@ -69,10 +72,17 @@ def summarizeDataset(dataset: CocoDetection):
         if lap not in location2Lap[location][direction]:
             location2Lap[location][direction].append(lap)
 
+        num_img = len(dataset.coco.getImgIds(catIds=catId))
+        prob = [i+1 for i in range(num_img)]
+        prob_sum = np.sum(prob)
+        prob /= prob_sum
+        catId2Prob[catId] = prob
+
         summary = {
             'lap2CatId': lap2CatId,
             'PN2CatId': PN2CatId,
             'location2Lap': location2Lap,
+            'catId2Prob': catId2Prob
         }
     return summary
 
@@ -103,3 +113,17 @@ def get_imgId2landmarkId(dataset: CocoDetection):
             imgId2landmarkId[img_id] = landmark_id
 
     return imgId2landmarkId, landmark_borders
+
+
+def gen_6_proto(landmarks):
+    landmarks_all = None
+    for i_landmark in range(landmarks.shape[0]):
+        landmarks_6 = None
+        for l in range(6):
+            window = landmarks[i_landmark, l: l+10, :, :, :]
+            window = window.unsqueeze(dim=0)
+            landmarks_6 = window if landmarks_6 is None else torch.cat([landmarks_6, window])
+        landmarks_6 = landmarks_6.unsqueeze(dim=0)
+        landmarks_all = landmarks_6 if landmarks_all is None else torch.cat([landmarks_all, landmarks_6])
+    return landmarks_all
+

@@ -24,14 +24,6 @@ def load_model(**kwargs):
         nn.Softplus()
     )
 
-    # classifier = nn.Sequential(
-    #     nn.Linear(FCdim, FCdim),
-    #     nn.ELU(),
-    #     nn.Linear(FCdim, 100),
-    #     nn.ELU(),
-    #     nn.Linear(100, 1),
-    #     nn.Sigmoid()
-    # )
     classifier = nn.Sequential(
         nn.Linear(FCdim, FCdim),
         nn.ELU(),

@@ -15,75 +15,95 @@ class ConsecLoader:
         self.location2Lap = summary['location2Lap']
         self.catId2Prob = summary['catId2Prob']
 
-    def get_sample(self, cls):
+    def get_sample(self, cls, debug=False):
         label = []
+        debug_info = {
+            'sup_cat_id': [],
+            'sup_inds': [],
+            'qry_pos_cat_id': [],
+            'qry_pos_inds': [],
+            'qry_neg_cat_id': [],
+            'qry_neg_inds': [],
+        }
 
         # sample a support set
         cat = self.dataset.coco.loadCats(cls)[0]
         sup_img_ids = sorted(self.dataset.coco.getImgIds(catIds=cls))
         sup_l = 0 if len(sup_img_ids) <= self.sup_size else np.random.randint(max(len(sup_img_ids) - self.sup_size, 1))
-        inds_sup = sup_img_ids[sup_l: sup_l + self.sup_size]
-        loader_sup = DataLoader(dataset=Subset(self.dataset, inds_sup), shuffle=False, batch_size=self.sup_size,
-                                pin_memory=False, drop_last=False)
-        sample = next(iter(loader_sup))[0]
+        sup_inds = sup_img_ids[sup_l: sup_l + self.sup_size]
+        if debug:
+            debug_info['sup_cat_id'].append(cat)
+            debug_info['sup_inds'].append(sup_inds)
+        else:
+            loader_sup = DataLoader(dataset=Subset(self.dataset, sup_inds), shuffle=False, batch_size=self.sup_size,
+                                    pin_memory=False, drop_last=False)
+            sample = next(iter(loader_sup))[0]
 
         # select laps with/without replacement and sample a positive query set from each
         laps_direction = self.location2Lap[cat['location']][cat['direction']]
         laps = list(np.random.choice(list(laps_direction), int(self.qry_num/2), replace=True))
         for lap in laps:
-            catId = [i for i in self.lap2CatId[lap] if self.dataset.coco.loadCats(i)[0]['name'] == cat['name']][0]
-            qry_img_ids = self.dataset.coco.getImgIds(catIds=catId)
-            qry_l = sup_l
-            while catId == cat['id'] and qry_l == sup_l:
-                qry_l = 0 if len(qry_img_ids) <= self.qry_size else np.random.randint(max(len(qry_img_ids) - self.qry_size, 1))
-            inds_qry = sup_img_ids[qry_l: qry_l + self.qry_size]
-            loader_qry = DataLoader(dataset=Subset(self.dataset, inds_qry), shuffle=False, batch_size=self.qry_size,
-                                    pin_memory=False, drop_last=False)
-            sample_qry = next(iter(loader_qry))[0]
-            sample = torch.cat([sample, sample_qry], dim=0)
-            label.append(1.)
+            qry_pos_cat_id = [i for i in self.lap2CatId[lap] if self.dataset.coco.loadCats(i)[0]['name'] == cat['name']][0]
+            qry_pos_img_ids = self.dataset.coco.getImgIds(catIds=qry_pos_cat_id)
+            qry_pos_l = sup_l
+            while qry_pos_cat_id == cat['id'] and qry_pos_l == sup_l:
+                qry_pos_l = 0 if len(qry_pos_img_ids) <= self.qry_size else np.random.randint(max(len(qry_pos_img_ids) - self.qry_size, 1))
+            qry_pos_inds = qry_pos_img_ids[qry_pos_l: qry_pos_l + self.qry_size]
+
+            if debug:
+                debug_info['qry_pos_cat_id'].append(qry_pos_cat_id)
+                debug_info['qry_pos_inds'].append(qry_pos_inds)
+            else:
+                loader_qry = DataLoader(dataset=Subset(self.dataset, qry_pos_inds), shuffle=False, batch_size=self.qry_size,
+                                        pin_memory=False, drop_last=False)
+                sample_qry = next(iter(loader_qry))[0]
+                sample = torch.cat([sample, sample_qry], dim=0)
+                label.append(1.)
 
         # select laps with/without replacement and sample a negative query set from each
         laps = list(np.random.choice(list(laps_direction), self.qry_num-int(self.qry_num/2), replace=True))
         for lap in laps:
-            catId_pos = [i for i in self.lap2CatId[lap] if self.dataset.coco.loadCats(i)[0]['name'] == cat['name']][0]
-            catId_neg = catId_pos - 1
-            imgIds = self.dataset.coco.getImgIds(catIds=catId_neg)
+            pos_cat_id = [i for i in self.lap2CatId[lap] if self.dataset.coco.loadCats(i)[0]['name'] == cat['name']][0]
+            qry_neg_cat_id = pos_cat_id - 1
+            qry_neg_img_ids = self.dataset.coco.getImgIds(catIds=qry_neg_cat_id)
 
-            if imgIds[-1]-self.qry_size > imgIds[0]:
-                imgId_l = imgIds[0]
-                prob = self.catId2Prob[catId_neg]
+            qry_neg_ls = range(qry_neg_img_ids[-1] - 50, qry_neg_img_ids[-1]+1)
+            qry_neg_l = np.random.choice(qry_neg_ls)
+            qry_neg_inds = [i for i in range(qry_neg_l, qry_neg_l+self.qry_size)]
+
+            if debug:
+                debug_info['qry_neg_cat_id'].append(qry_neg_cat_id)
+                debug_info['qry_neg_inds'].append(qry_neg_inds)
             else:
-                imgId_l = imgIds[-1] - self.qry_size
-                prob = [i for i in range(imgIds[-1]-imgId_l+1)]
-                prob /= np.sum(prob)
-            qry_ls = range(imgId_l, imgIds[-1]+1)
-            qry_l = np.random.choice(qry_ls, p=prob)
-            inds_qry = [i for i in range(qry_l, qry_l+self.qry_size)]
+                loader_qry = DataLoader(dataset=Subset(self.dataset, qry_neg_inds), shuffle=False, batch_size=self.qry_size,
+                                        pin_memory=False, drop_last=False)
+                sample_qry = next(iter(loader_qry))[0]
+                sample = torch.cat([sample, sample_qry], dim=0)
+                label.append(0.)
 
-            loader_qry = DataLoader(dataset=Subset(self.dataset, inds_qry), shuffle=False, batch_size=self.qry_size,
-                                    pin_memory=False, drop_last=False)
-            sample_qry = next(iter(loader_qry))[0]
-            sample = torch.cat([sample, sample_qry], dim=0)
-            label.append(0.)
+        if debug:
+            return debug
+        else:
+            return sample, label
 
-        return sample, label
-
-    def get_batch(self):
+    def get_batch(self, debug=False):
         sample_batch = torch.empty([self.batch, self.sup_size+self.qry_size*self.qry_num]+list(self.dataset[0][0].shape))
         labels = []
         cls = np.random.choice(self.PN2CatId['positive'], self.batch, replace=True)
-        for b, c in zip(range(self.batch), cls):
-            sample_batch[b], label = self.get_sample(c.item())
-            labels.append(label)
-        return ({
-            'images': sample_batch,
-            'labels': torch.tensor(labels),
-            'batch': self.batch,
-            'sup_size': self.sup_size,
-            'qry_size': self.qry_size,
-            'qry_num': self.qry_num
-        })
+        if debug:
+            return cls
+        else:
+            for b, c in zip(range(self.batch), cls):
+                sample_batch[b], label = self.get_sample(c.item())
+                labels.append(label)
+            return ({
+                'images': sample_batch,
+                'labels': torch.tensor(labels),
+                'batch': self.batch,
+                'sup_size': self.sup_size,
+                'qry_size': self.qry_size,
+                'qry_num': self.qry_num
+            })
 
 
 class RandNegLoader(ConsecLoader):
