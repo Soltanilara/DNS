@@ -43,7 +43,10 @@ class ConsecLoader:
         laps_direction = self.location2Lap[cat['location']][cat['direction']]
         laps = list(np.random.choice(list(laps_direction), int(self.qry_num/2), replace=True))
         for lap in laps:
-            qry_pos_cat_id = [i for i in self.lap2CatId[lap] if self.dataset.coco.loadCats(i)[0]['name'] == cat['name']][0]
+            try:
+                qry_pos_cat_id = [i for i in self.lap2CatId[lap] if self.dataset.coco.loadCats(i)[0]['name'] == cat['name']][0]
+            except:
+                pass
             qry_pos_img_ids = self.dataset.coco.getImgIds(catIds=qry_pos_cat_id)
             qry_pos_l = sup_l
             while qry_pos_cat_id == cat['id'] and qry_pos_l == sup_l:
@@ -67,7 +70,7 @@ class ConsecLoader:
             qry_neg_cat_id = pos_cat_id - 1
             qry_neg_img_ids = self.dataset.coco.getImgIds(catIds=qry_neg_cat_id)
 
-            qry_neg_ls = range(qry_neg_img_ids[-1] - 50, qry_neg_img_ids[-1]+1)
+            qry_neg_ls = range(qry_neg_img_ids[-1] - 50, qry_neg_img_ids[-1]+1)  # use 50 negative images
             qry_neg_l = np.random.choice(qry_neg_ls)
             qry_neg_inds = [i for i in range(qry_neg_l, qry_neg_l+self.qry_size)]
 

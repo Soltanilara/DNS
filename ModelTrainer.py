@@ -29,49 +29,27 @@ np.random.seed(0)
 torch.manual_seed(0)
 
 if sys.platform == 'linux':
-    # root_dir = "/home/nick/dataset/outside/"
-    # root_dir = "/home/nick/dataset/val_from_train/"
-    root_dir = "/home/nick/dataset/all/"
-    # root_dir = "/home/nick/dataset/ASB1F_V1/"
-    # root_dir = "/mnt/data/dataset/av/outside/"
+    root_dir = '/home/nick/dataset/dual_fisheye_indoor/'
 else:
-    # root_dir = '/Users/shidebo/dataset/AV/Sorted/ASB1F'
     root_dir = '/Users/shidebo/dataset/AV/Sorted/'
 
 transform_train = transforms.Compose([
-    transforms.Resize((224, 224)),
+    transforms.Resize((224, 448)),
     transforms.RandomApply([transforms.RandomRotation(degrees=10)], p=0.5),
     transforms.RandomApply([transforms.GaussianBlur(kernel_size=(5, 15))], p=0.5),
     transforms.RandomApply([
         transforms.CenterCrop(size=random.randint(200, 224)),
-        transforms.Resize((224, 224))], p=0.3),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-])
-transform_train_light = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.RandomApply([transforms.RandomRotation(degrees=10)], p=0.3),
-    transforms.RandomApply([transforms.GaussianBlur(kernel_size=(5, 15))], p=0.3),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-])
-transform_train_light_crop = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.RandomApply([transforms.RandomRotation(degrees=10)], p=0.3),
-    transforms.RandomApply([transforms.GaussianBlur(kernel_size=(5, 15))], p=0.3),
-    transforms.RandomApply([
-        transforms.CenterCrop(size=random.randint(200, 224)),
-        transforms.Resize((224, 224))], p=0.3),
+        transforms.Resize((224, 448))], p=0.3),
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
 transform_val = transforms.Compose([
-    transforms.Resize((224, 224)),
+    transforms.Resize((224, 448)),
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
 
-device = 3 if torch.cuda.is_available() else "cpu"  # use GPU if available
+device = 0 if torch.cuda.is_available() else "cpu"  # use GPU if available
 n_epochs_pre = 3
 n_epochs_fine = 40
 n_episodes = 16
@@ -86,20 +64,19 @@ stats_freq = 1
 sch_param_1 = 20
 sch_param_2 = 0.5
 FC_len = 1000
-course_name = '5_exclude_Bainer2F_Kemper3F_batch_3_neg_50_aug_light_crop'
+course_name = 'dual_fisheye_exclude_Bainer2F_Kemper3F_batch_3_neg_50_separate'
 savename = course_name +'_batch' + str(batch_pre) + '_' + str(sup_size) + '-shot_lr_' + str(lr) + '_lrsch_' + str(sch_param_2) + '_' + str(sch_param_1) + '_' + str(n_episodes) + 'episodes'
 print(savename)
 
 dataset_train = datasets.coco.CocoDetection(
     root=root_dir,
-    # annFile='coco/exclude_Bainer2F_ASB_Outside/train.json',
-    annFile='/home/nick/projects/FSL/coco/exclude_Bainer2F_Kemper3F/train.json',
-    transform=transform_train_light_crop
+    annFile='/home/nick/projects/FSL/coco/dual_fisheye/train.json',
+    transform=transform_train
 )
 dataset_val = datasets.coco.CocoDetection(
     root=root_dir,
     # annFile='coco/exclude_Bainer2F_ASB_Outside/val.json',
-    annFile='coco/exclude_Bainer2F_Kemper3F/val.json',
+    annFile='/home/nick/projects/FSL/coco/dual_fisheye/val.json',
     transform=transform_val
 )
 

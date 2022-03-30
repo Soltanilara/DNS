@@ -24,10 +24,11 @@ def load_model(**kwargs):
         nn.Softplus()
     )
 
+    # todo: use a more complicated structure
     classifier = nn.Sequential(
-        nn.Linear(FCdim, FCdim),
+        nn.Linear(FCdim*2, FCdim*2),
         nn.ELU(),
-        nn.Linear(FCdim, 100),
+        nn.Linear(FCdim*2, 100),
         nn.ELU(),
         nn.Linear(100, 10),
         nn.ELU(),
@@ -52,21 +53,7 @@ class StampNet(nn.Module):
             self.cov_module = cov_module.cuda(self.device)
             self.classifier = classifier.cuda(self.device)
 
-    def set_forward_loss(self, sample):
-        """
-        Takes the sample batch and computes loss, accuracy and output for classification task
-        """
-        sample_images = sample['images'].cuda(self.device)
-        batch = sample['batch']
-        sup_size = sample['sup_size']
-        qry_size = sample['qry_size']
-        sup_num = 1
-        qry_num = int((sample['images'].shape[1] - sup_size) / qry_size)
-        target_inds = Variable(sample['labels'], requires_grad=False).cuda(self.device)
-
-        x_support = sample_images[:, :sup_size]
-        x_query = sample_images[:, sup_size:]
-
+    def forward_one_side(self, x_support, x_query, batch, sup_num, sup_size, qry_num, qry_size):
         # concatenate and prepare images of the support and query sets for inputting to the network
         x = torch.cat([x_support.contiguous().view(batch * sup_size, *x_support.size()[-3:]),
                        x_query.contiguous().view(batch * qry_num * qry_size, *x_query.size()[-3:])], 0)
@@ -89,6 +76,37 @@ class StampNet(nn.Module):
         diff = proto_sup - proto_qry
         dists = (diff / (eigs_sup + eigs_qry)).view(batch * qry_num, -1) * diff.view(batch * qry_num, -1)
 
+        return dists
+
+    def set_forward_loss(self, sample):
+        """
+        Takes the sample batch and computes loss, accuracy and output for classification task
+        """
+        sample_images = sample['images'].cuda(self.device)
+        batch = sample['batch']
+        sup_size = sample['sup_size']
+        qry_size = sample['qry_size']
+        sup_num = 1
+        qry_num = int((sample['images'].shape[1] - sup_size) / qry_size)
+        target_inds = Variable(sample['labels'], requires_grad=False).cuda(self.device)
+
+        # x_support = sample_images[:, :sup_size]
+        # x_query = sample_images[:, sup_size:]
+
+        # Todo: reduce variables to save RAM
+
+        x_support_l = sample_images[:, :sup_size, :, :, :224]
+        x_support_r = sample_images[:, :sup_size, :, :, 224:]
+        x_query_l = sample_images[:, sup_size:, :, :, :224]
+        x_query_r = sample_images[:, sup_size:, :, :, 224:]
+
+        dists_l = self.forward_one_side(x_support_l, x_query_l, batch, sup_num, sup_size, qry_num, qry_size)
+        dists_r = self.forward_one_side(x_support_r, x_query_r, batch, sup_num, sup_size, qry_num, qry_size)
+
+        # dists_l = self.forward_one_side(sample_images[:, :sup_size, :, :, :224], sample_images[:, sup_size:, :, :, :224], batch, sup_num, sup_size, qry_num, qry_size)
+        # dists_r = self.forward_one_side(sample_images[:, sup_size:, :, :, :224], sample_images[:, sup_size:, :, :, 224:], batch, sup_num, sup_size, qry_num, qry_size)
+
+        dists = torch.cat([dists_l, dists_r], dim=1)
         pred = self.classifier(dists).view(batch, qry_num)
         pred_label = torch.round(pred)
 
