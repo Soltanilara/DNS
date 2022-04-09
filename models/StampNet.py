@@ -103,9 +103,6 @@ class StampNet(nn.Module):
         dists_l = self.forward_one_side(x_support_l, x_query_l, batch, sup_num, sup_size, qry_num, qry_size)
         dists_r = self.forward_one_side(x_support_r, x_query_r, batch, sup_num, sup_size, qry_num, qry_size)
 
-        # dists_l = self.forward_one_side(sample_images[:, :sup_size, :, :, :224], sample_images[:, sup_size:, :, :, :224], batch, sup_num, sup_size, qry_num, qry_size)
-        # dists_r = self.forward_one_side(sample_images[:, sup_size:, :, :, :224], sample_images[:, sup_size:, :, :, 224:], batch, sup_num, sup_size, qry_num, qry_size)
-
         dists = torch.cat([dists_l, dists_r], dim=1)
         pred = self.classifier(dists).view(batch, qry_num)
         pred_label = torch.round(pred)

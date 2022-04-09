@@ -4,6 +4,8 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from torchvision import transforms, datasets
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from time import time
@@ -12,6 +14,7 @@ import json
 
 from utils.loader import TestLoader
 from utils.utils import summarizeDataset, get_imgId2landmarkId, gen_6_proto
+from utils.datasets import AvCocoDetection
 
 def encode_one_side_landmark(model, landmarks, num_landmarks):
 
@@ -37,6 +40,7 @@ def LoadModel_LandmarkStats(device, loader, model_path):
     :param model_path: name of the model to be loaded
     """
 
+    print('loading model: {}'.format(model_path))
     model = torch.load(model_path, map_location='cpu').cuda(device)
     model.eval()
     for param in model.parameters():
@@ -100,7 +104,7 @@ def MatchDetector(model, image, lm_proto, lm_eigs, probabilities, threshold, dev
     probabilities = torch.cat([probabilities[1:], prob], 0)
     if torch.mean(probabilities) > threshold:
         match = True
-        probabilities = torch.zeros(probabilities.size(), requires_grad=False).cuda(device)
+        # probabilities = torch.zeros(probabilities.size(), requires_grad=False).cuda(device)
     else:
         match = False
     return match, probabilities
@@ -114,13 +118,13 @@ if __name__ == '__main__':
 
     root_dataset = '/home/nick/dataset/dual_fisheye_indoor/'
     dir_coco = 'coco/dual_fisheye'
-    model_path = '/home/nick/projects/FSL/ckpt/ModelMCN_dual_fisheye_exclude_Bainer2F_Kemper3F_batch_3_neg_50_separate.pth'
+    model_path = '/home/nick/projects/FSL/ckpt/ModelMCN_dual_fisheye_exclude_Bainer2F_Kemper3F_batch_3_neg_50_erase.pth'
     dir_output = 'output'
 
     # locations = ['ASB1F', 'ASB1F_New', 'ASB2F', 'Bainer2F', 'Ghausi2F', 'Ghausi2F_Lounge', 'Kemper3F', 'Math_outside', 'ASB_Outside', 'Facility_outside']
-    # locations = ['ASB1F', 'ASB2F', 'Bainer2F', 'Ghausi2F', 'Ghausi2F_Lounge', 'Kemper3F']
-    locations = ['ASB1F', 'ASB2F', 'Bainer2F', 'Ghausi2F']
-    # locations = ['Ghausi2F']
+    locations = ['ASB1F', 'ASB2F', 'Bainer2F', 'Ghausi2F', 'Ghausi2F_Lounge', 'Kemper3F']
+    # locations = ['Kemper3F']
+    # locations = ['ASB2F']
 
     device = 0
     channels, im_height, im_width = 3, 224, 448
@@ -132,6 +136,12 @@ if __name__ == '__main__':
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
+    # transform = A.Compose([
+    #     A.Crop(x_min=0, y_min=0, x_max=520, y_max=192, always_apply=True),
+    #     A.Resize(height=224, width=448),
+    #     A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    #     ToTensorV2(),
+    # ])
 
     # fig_frame = plt.figure(figsize=(32, 8*len(locations)/2))
     # fig_average = plt.figure(figsize=(32, 8*len(locations)/2))
@@ -139,21 +149,23 @@ if __name__ == '__main__':
 
     for i, location in enumerate(locations):
         print('[{}/{}] Testing: {}'.format(i+1, len(locations), location))
-        coco_path_test = osp.join(dir_coco, 'test', 'test_'+location+'.json')
-        coco_path_landmark = osp.join(dir_coco, 'test', 'test_'+location+'_landmark.json')
+        # coco_path_test = osp.join(dir_coco, 'test', 'test_'+location+'.json')
+        # coco_path_landmark = osp.join(dir_coco, 'test', 'test_'+location+'_landmark.json')
+        coco_path_test = osp.join(dir_coco, 'test', 'change_lap', 'test_'+location+'.json')
+        coco_path_landmark = osp.join(dir_coco, 'test', 'change_lap', 'test_'+location+'_landmark.json')
 
-        dataset_test = datasets.coco.CocoDetection(
+        dataset_test = AvCocoDetection(
                 root=root_dataset,
                 annFile=coco_path_test,
                 transform=transform
             )
-        dataset_landmark = datasets.coco.CocoDetection(
+        dataset_landmark = AvCocoDetection(
                 root=root_dataset,
                 annFile=coco_path_landmark,
                 transform=transform
             )
         dataloader_test = TestLoader(dataset_test, summarizeDataset(dataset_test))
-        dataloader_landmark = TestLoader(dataset_landmark, summarizeDataset(dataset_test))
+        dataloader_landmark = TestLoader(dataset_landmark, summarizeDataset(dataset_landmark))
 
         model, proto_sup, eigs_sup = LoadModel_LandmarkStats(device, dataloader_landmark, model_path)
 
@@ -207,7 +219,7 @@ if __name__ == '__main__':
         plt.ylim(0, 1)
         plt.xlim(0, i)
         # plt.show
-        # plt.savefig(osp.join(dir_figure, 'landmark frame probability_'+location+'.png'), dpi=300)
+        plt.savefig(osp.join(dir_figure, 'landmark frame probability_'+location+'.png'), dpi=300)
         # plt.close()
 
         fig_average = plt.figure(figsize=(16, 8))

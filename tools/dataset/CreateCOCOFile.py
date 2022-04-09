@@ -20,12 +20,17 @@ if __name__ == '__main__':
     # dataset_root = r'/Volumes/dataset/autonomous-navifation/sorted'
     # dir_output = r'/Users/shidebo/SynologyDrive/Projects/AV/code/coco'
 
-    dataset_root = r'/volume1/dataset/av/sorted'
-    dir_output = r'/var/services/homes/SDB/Drive/Projects/AV/code/coco/coco_indoor_exclude_Bainer2F_Kemper3F'
+    # dataset_root = r'/volume1/dataset/av/sorted'
+    # dir_output = r'/var/services/homes/SDB/Drive/Projects/AV/code/coco/coco_indoor_exclude_Bainer2F_Kemper3F'
 
+    dataset_root = r'/home/nick/dataset/dual_fisheye_indoor'
+    dir_output = r'/home/nick/projects/FSL/coco/dual_fisheye/test/change_lap'
+
+    # exclude_locations = [
+    #     'Bainer2F', 'Kemper3F'
+    # ]
     exclude_locations = [
-        'Bainer2F', 'Kemper3F',
-        'ASB_Outside', 'Facility_outside', 'ASB_Outside', 'Math_outside'
+        'ASB1F', 'ASB2F', 'Bainer2F', 'Ghausi2F_Lounge', 'Kemper3F'
     ]
     # exclude_locations = []
 
@@ -38,8 +43,8 @@ if __name__ == '__main__':
     }
 
     # for dataset_type in ['train', 'val', 'test', 'landmark']:
-    # for dataset_type in ['test', 'landmark']:
-    for dataset_type in ['train', 'val']:
+    for dataset_type in ['test', 'landmark']:
+    # for dataset_type in ['train', 'val']:
         cat_id = -1
         img_id = -1
         ann_id = -1
@@ -71,7 +76,8 @@ if __name__ == '__main__':
                 elif dataset_type == 'test':
                     laps_type = laps[num_train+num_val:]
                 else:
-                    laps_type = laps[num_train+num_val-1]
+                    laps_type = laps[num_train + num_val - 1]
+                    # laps_type = laps[-3]
                     if not isinstance(laps_type, list):
                         laps_type = [laps_type]
 

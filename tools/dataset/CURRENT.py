@@ -7,6 +7,7 @@ from os import listdir
 from os.path import isfile, join
 import plotly.express as px
 
+
 def traverse_datasets(hdf_file):
 
     def h5py_dataset_iterator(g, prefix=''):
@@ -14,13 +15,27 @@ def traverse_datasets(hdf_file):
             item = g[key]
             path = f'{prefix}/{key}'
             if isinstance(item, h5py.Dataset): # test for dataset
-                yield (path, item)
+                yield (path, key)
             elif isinstance(item, h5py.Group): # test for group (go down)
                 yield from h5py_dataset_iterator(item, path)
 
-    for path, _ in h5py_dataset_iterator(hdf_file):
-        yield path
-        
+    for path, key in h5py_dataset_iterator(hdf_file):
+        yield path, key
+
+
+def is_dual_camera(hdf_file):
+    for group in hdf_file.keys():
+        keys = [key for key in hdf_file[group].keys()]
+        if 'imgLeft' in keys and 'imgRight' in keys:
+            return True
+        else:
+            return False
+
+
+def crop_fisheye(arr):
+    return arr[:, 30:290, :]
+
+
 def percentage_diff(num1, num2):
     a = abs(num1-num2)
     b = (num1+num2) / 2
@@ -65,18 +80,37 @@ while again == 1:
             shutil.rmtree(file[:-5])
             os.mkdir(file[:-5])
         with h5py.File(file, 'r') as f:
-            for dset in traverse_datasets(f):
-                if f[dset].shape==(240, 320, 3):
-                    j = np.array(f[dset][:])
-                    array = np.reshape(j, (240, 320,3))
-                    im = Image.fromarray(array)
-                    im = ImageOps.flip(im)
-                    file_name = str(i)
-                    file_name = file_name.zfill(5)
-                    file_name = file[:-5] + "/" + file_name + ".jpg"
-                    im.save(file_name)
-                    i = i+1
-                    foundImg = 1
+            DUAL_CAM = is_dual_camera(f)
+            for dset, key in traverse_datasets(f):
+                if f[dset].shape == (240, 320, 3):
+                    if DUAL_CAM:
+                        if key == 'imgLeft':
+                            j = np.array(f[dset][:])
+                            array_l = np.reshape(j, (240, 320, 3))
+                            array_l = crop_fisheye(array_l)
+                            SAVE = False
+                        elif key == 'imgRight':
+                            j = np.array(f[dset][:])
+                            array_r = np.reshape(j, (240, 320, 3))
+                            array_r = crop_fisheye(array_r)
+                            array = np.concatenate((array_l, array_r), axis=1)
+                            # uncomment of cameras are switched
+                            # array = np.concatenate((array_r, array_l), axis=1)
+                            SAVE = True
+
+                    else:
+                        SAVE = True
+                        j = np.array(f[dset][:])
+                        array = np.reshape(j, (240, 320, 3))
+                    if SAVE:
+                        im = Image.fromarray(array)
+                        im = ImageOps.flip(im)
+                        file_name = str(i)
+                        file_name = file_name.zfill(5)
+                        file_name = file[:-5] + "/" + file_name + ".jpg"
+                        im.save(file_name)
+                        i = i+1
+                        foundImg = 1
                 if 'steering' in dset:
                     h.append(np.array(f[dset]))
                     dict[i-1] = np.array(f[dset])
@@ -100,7 +134,7 @@ while again == 1:
                     ii = ii
             elif ((max(h) - h[0]) - (h[0] - min(h))) < 0:
                 if abs(((max(h) - h[0]) - (h[0] - min(h)))) < 50:
-                    ii = np.concatentate((ii,iz))
+                    ii = np.concatenate((ii,iz))
                 else:
                     ii = iz
 
@@ -142,7 +176,7 @@ while again == 1:
                 floor = 100*math.floor(h[0]/100)
                 ceil = 100*math.ceil(h[0]/100)
                 tooclose = 10
-                numimgs = 'n'
+                numimgs = 150
             else:
                 window = input("How many frames around landmarks should the window be (d for default)(odd number)\n")
                 if window == 'd':
@@ -296,10 +330,10 @@ while again == 1:
 
             ## ----------------------------------- DISPLAY FIGURE -----------------------------
                     
-            figure = px.line(x=range(i), y = h)
+            figure = px.line(x=range(len(h)), y=h)
             for y in iii:
-                figure.add_vline(x = y, line_color = 'red')
-                figure.add_vline(x = y - int(c), line_color = 'green')
+                figure.add_vline(x=y, line_color='red')
+                figure.add_vline(x=y - int(c), line_color='green')
             if folderorfile == 'file':
                 figure.show()
 
@@ -340,10 +374,10 @@ while again == 1:
                     print("Added landmark at " + str(addldmrk) + "\n")
 
 
-            finalfigure = px.line(x=range(i), y = h)
+            finalfigure = px.line(x=range(len(h)), y=h)
             for y in iii:
-                finalfigure.add_vline(x = y, line_color = 'red')
-                finalfigure.add_vline(x = y - int(c), line_color = 'green')
+                finalfigure.add_vline(x=y, line_color='red')
+                finalfigure.add_vline(x=y - int(c), line_color='green')
 
             iv = []
             vii = []
