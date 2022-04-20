@@ -40,8 +40,8 @@ def generate_dict(laps_type, dir_direction, cat_id, img_id, ann_id):
                 fname = osp.basename(path_img)
                 img_id += 1
                 img = {
-                    'file_name': osp.join(location, direction, lap, landmark, fname),
-                    'file_path': osp.join(location, direction, lap, landmark, fname),
+                    'file_name': osp.join(location, osp.basename(dir_direction), lap, landmark, fname),
+                    'file_path': osp.join(location, osp.basename(dir_direction), lap, landmark, fname),
                     'id': img_id,
                 }
                 images.append(img)
@@ -53,7 +53,7 @@ def generate_dict(laps_type, dir_direction, cat_id, img_id, ann_id):
                     'id': ann_id,
                 }
                 annotations.append(ann)
-    return info, images, annotations, categories
+    return cat_id, img_id, ann_id
 
 
 if __name__ == '__main__':
@@ -64,27 +64,25 @@ if __name__ == '__main__':
     # dir_output = r'/var/services/homes/SDB/Drive/Projects/AV/code/coco/coco_indoor_exclude_Bainer2F_Kemper3F'
 
     dataset_root = r'/home/nick/dataset/dual_fisheye_indoor'
-    dir_output = r'/home/nick/projects/FSL/coco/dual_fisheye/debug'
+    dir_output = r'/home/nick/projects/FSL/coco/dual_fisheye/coco_exclude_Ghausi2F_Lounge_Kemper3F'
 
+    exclude_locations = [
+        'Ghausi2F_Lounge', 'Kemper3F'
+    ]
     # exclude_locations = [
-    #     'Bainer2F', 'Kemper3F'
+    #     'ASB2F', 'Bainer2F', 'Ghausi2F', 'Ghausi2F_Lounge', 'Kemper3F'
     # ]
-    # exclude_locations = [
-    #     'ASB1F', 'ASB2F', 'Bainer2F', 'Ghausi2F_Lounge', 'Kemper3F'
-    # ]
-    exclude_locations = []
+    # exclude_locations = []
 
     info = {
         'description': 'Exclude:' + str(exclude_locations),
         'directions': ['cw', 'ccw'],
         'num_landmark': 8,
-        'img_shape': [320, 240],
         'num_cats': 0
     }
 
-    # for dataset_type in ['train', 'val', 'test', 'landmark']:
-    for dataset_type in ['test']:
-    # for dataset_type in ['train', 'val']:
+    # for dataset_type in ['test']:
+    for dataset_type in ['train', 'val']:
         cat_id = -1
         img_id = -1
         ann_id = -1
@@ -95,19 +93,20 @@ if __name__ == '__main__':
             location = osp.basename(dir_location)
             num_laps = len([i for i in glob(osp.join(dir_location, '*', '*')) if osp.basename(i) != '@eaDir'])
             num_val = 2 if num_laps > 8 else 1
-            num_test = 1
+            num_test = 0
             num_train = int(num_laps / 2) - num_val - num_test
-            if dataset_type in ['train', 'tval']:
+            if dataset_type in ['train', 'val']:
                 for direction in ['cw', 'ccw']:
                     dir_direction = osp.join(dataset_root, location, direction)
                     laps = [i for i in os.listdir(dir_direction) if osp.isdir(osp.join(dir_direction, i)) and i != '@eaDir']
                     laps.sort()
                     if dataset_type == 'train':
                         laps_type = laps[:num_train]
-                        info, images, annotations, categories = generate_dict(laps_type)
+                        cat_id, img_id, ann_id = generate_dict(laps_type, dir_direction, cat_id, img_id, ann_id)
                     elif dataset_type == 'val':
                         laps_type = laps[num_train:num_train + num_val]
-                        info, images, annotations, categories = generate_dict(laps_type)
+                        cat_id, img_id, ann_id = generate_dict(laps_type, dir_direction, cat_id, img_id, ann_id)
+                    print('Creating dataset: {}, location: {}, direction: {}, num_lap: {}'.format(dataset_type, location, direction, len(laps_type)))
 
             elif dataset_type == 'test':
                 laps = {}
@@ -125,13 +124,12 @@ if __name__ == '__main__':
                     annotations = []
                     categories = []
 
-                    generate_dict([lap_cw], osp.join(dataset_root, location, 'cw'), cat_id, img_id, ann_id)
-                    generate_dict([lap_ccw], osp.join(dataset_root, location, 'ccw'), cat_id, img_id, ann_id)
+                    cat_id, img_id, ann_id = generate_dict([lap_cw], osp.join(dataset_root, location, 'cw'), cat_id, img_id, ann_id)
+                    cat_id, img_id, ann_id = generate_dict([lap_ccw], osp.join(dataset_root, location, 'ccw'), cat_id, img_id, ann_id)
                     time_cw = lap_cw.split('_')[1]
                     time_ccw = lap_ccw.split('_')[1]
                     save_json(osp.join(dir_output, '_'.join([dataset_type, location, time_cw, time_ccw]) + '.json'),
                               info, images, annotations, categories)
-                # print('Creating dataset: {}, location: {}, direction: {}, num_lap: {}'.format(dataset_type, location, direction, len(laps_type)))
 
             # if dataset_type == 'test':
             #     save_json(osp.join(dir_output, dataset_type + '_' + location + '.json'), info, images, annotations, categories)
@@ -139,4 +137,6 @@ if __name__ == '__main__':
             #     save_json(osp.join(dir_output, 'test_' + location + '_landmark' + '.json'), info, images, annotations, categories)
 
         if dataset_type in ['train', 'val']:
-            save_json(osp.join(dir_output, dataset_type + '.json'), info, images, annotations, categories)
+            path_save = osp.join(dir_output, dataset_type + '.json')
+            save_json(path_save, info, images, annotations, categories)
+            print('Saved: {}'.format(path_save))
