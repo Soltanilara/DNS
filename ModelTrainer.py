@@ -1,4 +1,5 @@
 import os
+import os.path as osp
 import sys
 import random
 
@@ -9,18 +10,14 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torchvision import transforms, datasets
-import albumentations as A
-from albumentations.pytorch import ToTensorV2
 import csv
 import time
 from collections import OrderedDict
 from tqdm import tqdm
 
 from models.StampNet import load_model
-from utils.loader import RandNegLoader, ConsecLoader
-from utils.utils import sortImgs, summarizeDataset
-from utils.datasets import AvCocoDetection
+from utils.loader import ConsecLoader
+from utils.datasets import get_dataset
 
 print(torch.cuda.is_available())
 # torch.autograd.set_detect_anomaly(True)
@@ -31,39 +28,12 @@ np.random.seed(0)
 torch.manual_seed(0)
 
 if sys.platform == 'linux':
-    root_dir = '/home/nick/dataset/dual_fisheye_indoor/'
+    dir_dataset = '/home/nick/dataset/dual_fisheye_indoor/'
+    dir_coco = '/home/nick/projects/FSL/coco/dual_fisheye/coco_exclude_Ghausi2F_Lounge_Kemper3F'
 else:
-    root_dir = '/Users/shidebo/dataset/AV/Sorted/'
+    dir_dataset = '/Users/shidebo/dataset/AV/Sorted/'
 
-# transform_train = transforms.Compose([
-#     transforms.RandomApply([transforms.RandomRotation(degrees=10)], p=0.5),
-#     transforms.RandomApply([transforms.ColorJitter(brightness=0.5, hue=0.2)], p=0.5),
-#     transforms.Resize((224, 448)),
-#     transforms.ToTensor(),
-#     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-#     transforms.RandomErasing(scale=(0.02, 0.2), ratio=(0.2, 5), p=0.5),
-# ])
-# transform_val = transforms.Compose([
-#     transforms.Resize((224, 448)),
-#     transforms.ToTensor(),
-#     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-# ])
-transform_train = A.Compose([
-    A.Crop(x_min=0, y_min=0, x_max=520, y_max=192, always_apply=True),
-    A.Resize(height=224, width=448),
-    A.Rotate(limit=10),
-    A.ColorJitter(),
-    A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ToTensorV2(),
-])
-transform_val = A.Compose([
-    A.Crop(x_min=0, y_min=0, x_max=520, y_max=192, always_apply=True),
-    A.Resize(height=224, width=448),
-    A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ToTensorV2(),
-])
-
-device = 0 if torch.cuda.is_available() else "cpu"  # use GPU if available
+device = 1 if torch.cuda.is_available() else "cpu"  # use GPU if available
 n_epochs_pre = 3
 n_epochs_fine = 30
 n_episodes = 16
@@ -78,30 +48,12 @@ stats_freq = 1
 sch_param_1 = 5
 sch_param_2 = 0.5
 FC_len = 1000
-course_name = 'dual_fisheye_exclude_Bainer2F_Kemper3F_batch_3_neg_50_crop_bottom'
+course_name = 'dual_fisheye_exclude_Ghausi2F_Lounge_Kemper3F_batch_3_neg_50_aug_strong'
 savename = course_name +'_batch' + str(batch_pre) + '_' + str(sup_size) + '-shot_lr_' + str(lr) + '_lrsch_' + str(sch_param_2) + '_' + str(sch_param_1) + '_' + str(n_episodes) + 'episodes'
 print(savename)
 
-# dataset_train = datasets.coco.CocoDetection(
-#     root=root_dir,
-#     annFile='/home/nick/projects/FSL/coco/dual_fisheye/train.json',
-#     transform=transform_train
-# )
-# dataset_val = datasets.coco.CocoDetection(
-#     root=root_dir,
-#     annFile='/home/nick/projects/FSL/coco/dual_fisheye/val.json',
-#     transform=transform_val
-# )
-dataset_train = AvCocoDetection(
-    root=root_dir,
-    annFile='/home/nick/projects/FSL/coco/dual_fisheye/train.json',
-    transform=transform_train
-)
-dataset_val = AvCocoDetection(
-    root=root_dir,
-    annFile='/home/nick/projects/FSL/coco/dual_fisheye/val.json',
-    transform=transform_val
-)
+dataset_train = get_dataset(dir_dataset, osp.join(dir_coco, 'train.json'), 'train')
+dataset_val = get_dataset(dir_dataset, osp.join(dir_coco, 'val.json'), 'val')
 
 
 # Train def-------------------------------------------------------------------------
@@ -132,13 +84,12 @@ def ftrain(model, optimizer, dataset_train, dataset_val, sup_size, qry_size, qry
     stop = False  # status to know when to stop
     best_acc = 0
     model_best_path = ''
-    dataset_summary = summarizeDataset(dataset_train)
 
     while epoch < max_epoch and not stop:
         model.train()
         bar = tqdm(range(epoch_size), desc="Epoch {:d} train".format(epoch + 1))
         for episode_batch in bar:
-            loader = ConsecLoader(batch, sup_size, qry_size, qry_num, dataset_train, dataset_summary)
+            loader = ConsecLoader(batch, sup_size, qry_size, qry_num, dataset_train)
             sample = loader.get_batch()
             optimizer.zero_grad()
 
@@ -168,9 +119,8 @@ def ftrain(model, optimizer, dataset_train, dataset_val, sup_size, qry_size, qry
             running_acc = 0.0
             model.eval()
             bar = tqdm(range(epoch_size), desc="Epoch {:d} val".format(epoch))
-            # for _ in trange(epoch_size, desc="Epoch {:d} val".format(epoch)):
             for _ in bar:
-                loader = ConsecLoader(batch, sup_size, qry_size, qry_num, dataset_val, summarizeDataset(dataset_val))
+                loader = ConsecLoader(batch, sup_size, qry_size, qry_num, dataset_val)
                 sample = loader.get_batch()
                 loss, output = model.set_forward_loss(sample)
                 running_loss += float(output['loss'])

@@ -4,16 +4,16 @@ from torch.utils.data import DataLoader, Subset
 
 
 class ConsecLoader:
-    def __init__(self, batch, sup_size, qry_size, qry_num, dataset, summary):
+    def __init__(self, batch, sup_size, qry_size, qry_num, dataset):
         self.batch = batch
         self.sup_size = sup_size
         self.qry_size = qry_size
         self.qry_num = qry_num
         self.dataset = dataset
-        self.lap2CatId = summary['lap2CatId']
-        self.PN2CatId = summary['PN2CatId']
-        self.location2Lap = summary['location2Lap']
-        self.catId2Prob = summary['catId2Prob']
+        self.lap2CatId = dataset.summary['lap2CatId']
+        self.PN2CatId = dataset.summary['PN2CatId']
+        self.location2Lap = dataset.summary['location2Lap']
+        self.catId2Prob = dataset.summary['catId2Prob']
 
     def get_sample(self, cls, debug=False):
         label = []
