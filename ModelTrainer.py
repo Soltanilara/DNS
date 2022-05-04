@@ -1,7 +1,6 @@
 import os
 import os.path as osp
 import sys
-import random
 
 import numpy as np
 import pandas as pd
@@ -29,7 +28,8 @@ torch.manual_seed(0)
 
 if sys.platform == 'linux':
     dir_dataset = '/home/nick/dataset/dual_fisheye_indoor/'
-    dir_coco = '/home/nick/projects/FSL/coco/dual_fisheye/coco_exclude_Ghausi2F_Lounge_Kemper3F'
+    dir_coco = '/home/nick/projects/FSL/coco/dual_fisheye/exclude_Ghausi2F_Lounge_Kemper3F'
+    dir_output = '/home/nick/projects/FSL/output'
 else:
     dir_dataset = '/Users/shidebo/dataset/AV/Sorted/'
 
@@ -38,18 +38,18 @@ n_epochs_pre = 3
 n_epochs_fine = 30
 n_episodes = 16
 batch_pre = 16
-batch_fine = 3
+batch_fine = 2
 sup_size = 10
 qry_size = 10
-qry_num = 6
+qry_num = 5
 channels, im_height, im_width = 3, 224, 224
 lr = 1e-3
 stats_freq = 1
 sch_param_1 = 5
 sch_param_2 = 0.5
 FC_len = 1000
-course_name = 'dual_fisheye_exclude_Ghausi2F_Lounge_Kemper3F_batch_3_neg_50_aug_strong'
-savename = course_name +'_batch' + str(batch_pre) + '_' + str(sup_size) + '-shot_lr_' + str(lr) + '_lrsch_' + str(sch_param_2) + '_' + str(sch_param_1) + '_' + str(n_episodes) + 'episodes'
+course_name = 'dual_fisheye_exclude_Ghausi2F_Lounge_Kemper3F_batch_3_neg_50_coarse_only'
+savename = course_name+'_batch'+str(batch_pre)+'_' + str(sup_size)+'-shot_lr_'+str(lr)+'_lrsch_'+str(sch_param_2)+'_'+str(sch_param_1)+'_'+str(n_episodes)+'episodes'
 print(savename)
 
 dataset_train = get_dataset(dir_dataset, osp.join(dir_coco, 'train.json'), 'train')
@@ -141,10 +141,14 @@ def ftrain(model, optimizer, dataset_train, dataset_val, sup_size, qry_size, qry
                 model_best_path = 'ckpt/model_best_' + savename + '.pth'
                 torch.save(model, model_best_path)
                 print('Model saved to: ' + model_best_path)
-        w = csv.writer(open("accuracy_stats_"+savename+".csv", "w")) # updates a record of accuracies
+        scheduler.step()
+
+        dir_csv = osp.join(dir_output, 'csv')
+        if not osp.exists(dir_csv):
+            os.makedirs(dir_csv)
+        w = csv.writer(open(osp.join(dir_csv, "accuracy_stats_"+savename+".csv") , "w")) # updates a record of accuracies
         for key, val in accuracy_stats.items():
             w.writerow([key, val])
-        scheduler.step()
         print("\n", time.time() - ts, "\n")
     return loss_stats, accuracy_stats, loss_first_epoch, acc_first_epoch
 
@@ -213,7 +217,7 @@ sns.lineplot(data=train_loss_df, x="Batches", y="value", hue="variable", ax=axes
 sns.lineplot(data=val_loss_df, x="Epochs", y="value", hue="variable", ax=axes[1, 1], legend=False,
              palette=['red']).set_title(
     'Validation loss vs epoch')
-fig.savefig('Loss Acc ' + str(n_epochs_pre) + ' epochs ' + savename + '.png')
+fig.savefig(osp.join(dir_output, 'figures', 'Loss Acc '+str(n_epochs_pre)+' epochs '+savename+'.png'))
 
 train_first_epoch_acc_df = pd.DataFrame.from_dict(acc_first_epoch).reset_index().melt(id_vars=['index']).rename(
     columns={"index": "Batches"})
@@ -224,7 +228,7 @@ sns.lineplot(data=train_first_epoch_acc_df, x="Batches", y="value", hue="variabl
     'Training accuracy vs batch for the first epoch')
 sns.lineplot(data=train_first_epoch_loss_df, x="Batches", y="value", hue="variable", ax=axes[1]).set_title(
     'Training loss vs batch for the first epoch')
-fig.savefig('Epoch 1 ' + str(n_epochs_pre) + ' epochs ' + savename + '.png')
+fig.savefig(osp.join(dir_output, 'figures', 'Epoch 1 ' + str(n_epochs_pre) + ' epochs ' + savename + '.png'))
 #-----------------------------------------------------------------------------------------------------------------------
 
 if n_epochs_pre > 0:
@@ -299,7 +303,7 @@ sns.lineplot(data=train_loss_df, x="Batches", y="value", hue="variable", ax=axes
 sns.lineplot(data=val_loss_df, x="Epochs", y="value", hue="variable", ax=axes[1, 1], legend=False,
              palette=['red']).set_title(
     'Validation loss vs epoch')
-fig.savefig('Loss Acc ' + str(n_epochs_fine) + ' epochs ' + savename + '.png')
+fig.savefig(osp.join(dir_output, 'figures', 'Loss Acc '+str(n_epochs_fine)+' epochs '+savename+'.png'))
 
 train_first_epoch_acc_df = pd.DataFrame.from_dict(acc_first_epoch).reset_index().melt(id_vars=['index']).rename(
     columns={"index": "Batches"})
@@ -310,12 +314,12 @@ sns.lineplot(data=train_first_epoch_acc_df, x="Batches", y="value", hue="variabl
     'Training accuracy vs batch for the first epoch')
 sns.lineplot(data=train_first_epoch_loss_df, x="Batches", y="value", hue="variable", ax=axes[1]).set_title(
     'Training loss vs batch for the first epoch')
-fig.savefig('Epoch 1 ' + str(n_epochs_fine) + ' epochs ' + savename + '.png')
+fig.savefig(osp.join(dir_output, 'figures', 'Epoch 1 '+str(n_epochs_fine)+' epochs '+savename+'.png'))
 
 acc_list = accuracy_stats['val']
 max_value = max(acc_list)
 max_index = acc_list.index(max_value)
-print(max_index+1) #prints the epoch number of fine-tuned model with max accuracy
+print('Best epoch: {}'.format(max_index+1)) #prints the epoch number of fine-tuned model with max accuracy
 
 # Load the best-performing model and save with suitable name and format for evaluation----------------------------------
 model = torch.load('ckpt/model_best_' + savename + '.pth').cuda(device) #loads the fine-tuned model with highest validation accuracy

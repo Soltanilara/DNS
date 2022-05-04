@@ -3,6 +3,12 @@ import torch
 from torch.utils.data import DataLoader, Subset
 
 
+def collate_fn(batch):
+    # images = [i[0] for i in batch]
+    # return images
+    return batch
+
+
 class ConsecLoader:
     def __init__(self, batch, sup_size, qry_size, qry_num, dataset):
         self.batch = batch
@@ -36,8 +42,8 @@ class ConsecLoader:
             debug_info['sup_inds'].append(sup_inds)
         else:
             loader_sup = DataLoader(dataset=Subset(self.dataset, sup_inds), shuffle=False, batch_size=self.sup_size,
-                                    pin_memory=False, drop_last=False)
-            sample = next(iter(loader_sup))[0]
+                                    pin_memory=False, drop_last=False, collate_fn=collate_fn)
+            sample = self.dataset.transform.apply(next(iter(loader_sup)))
 
         # select laps with/without replacement and sample a positive query set from each
         laps_direction = self.location2Lap[cat['location']][cat['direction']]
@@ -58,8 +64,8 @@ class ConsecLoader:
                 debug_info['qry_pos_inds'].append(qry_pos_inds)
             else:
                 loader_qry = DataLoader(dataset=Subset(self.dataset, qry_pos_inds), shuffle=False, batch_size=self.qry_size,
-                                        pin_memory=False, drop_last=False)
-                sample_qry = next(iter(loader_qry))[0]
+                                        pin_memory=False, drop_last=False, collate_fn=collate_fn)
+                sample_qry = self.dataset.transform.apply(next(iter(loader_qry)))
                 sample = torch.cat([sample, sample_qry], dim=0)
                 label.append(1.)
 
@@ -79,8 +85,8 @@ class ConsecLoader:
                 debug_info['qry_neg_inds'].append(qry_neg_inds)
             else:
                 loader_qry = DataLoader(dataset=Subset(self.dataset, qry_neg_inds), shuffle=False, batch_size=self.qry_size,
-                                        pin_memory=False, drop_last=False)
-                sample_qry = next(iter(loader_qry))[0]
+                                        pin_memory=False, drop_last=False, collate_fn=collate_fn)
+                sample_qry = self.dataset.transform.apply(next(iter(loader_qry)))
                 sample = torch.cat([sample, sample_qry], dim=0)
                 label.append(0.)
 
@@ -90,8 +96,13 @@ class ConsecLoader:
             return sample, label
 
     def get_batch(self, debug=False):
-        sample_batch = torch.empty([self.batch, self.sup_size+self.qry_size*self.qry_num]+list(self.dataset[0][0].shape))
         labels = []
+        if hasattr(self.dataset[0][0], 'shape'):
+            img_size = self.dataset[0][0].shape
+        else:
+            img_size = [3, self.dataset.transform.param_range['Resize']['height'],
+                        self.dataset.transform.param_range['Resize']['width']]
+        sample_batch = torch.empty([self.batch, self.sup_size+self.qry_size*self.qry_num]+list(img_size))
         cls = np.random.choice(self.PN2CatId['positive'], self.batch, replace=True)
         if debug:
             return cls
@@ -157,16 +168,16 @@ class RandNegLoader(ConsecLoader):
 
 
 class TestLoader:
-    def __init__(self, dataset, summary):
+    def __init__(self, dataset):
         self.dataset = dataset
-        self.pos_catIds = summary['PN2CatId']['positive']
+        self.pos_catIds = dataset.summary['PN2CatId']['positive']
 
     def get_all_landmarks(self):
         landmarks = None
         for catId in self.pos_catIds:
             ids_img_sup = self.dataset.coco.getImgIds(catIds=catId)
             loader = DataLoader(dataset=Subset(self.dataset, ids_img_sup), shuffle=False, batch_size=len(ids_img_sup),
-                                pin_memory=False, drop_last=False)
+                                pin_memory=False, drop_last=False, collate_fn=collate_fn)
             landmark = next(iter(loader))[0]
             landmark = landmark.view([1] + list(landmark.shape))
             landmarks = torch.cat([landmarks, landmark], dim=0) if landmarks is not None else landmark

@@ -54,11 +54,12 @@ def get_imgId2landmarkId(dataset: CocoDetection):
     for catId in catIds:
         img_ids = sorted(dataset.coco.getImgIds(catIds=catId))
 
-        if 'negative' in dataset.coco.loadCats(catId)[0]['name'] and catId not in ignore_ids:
-            landmark_id += 1
-        else:
-            landmark_borders['start'].append(img_ids[0])
-            landmark_borders['end'].append(img_ids[-1])
+        if catId not in ignore_ids:
+            if 'negative' in dataset.coco.loadCats(catId)[0]['name']:
+                landmark_id += 1
+            else:
+                landmark_borders['start'].append(img_ids[0])
+                landmark_borders['end'].append(img_ids[-1])
 
         for img_id in img_ids:
             imgId2landmarkId[img_id] = landmark_id
