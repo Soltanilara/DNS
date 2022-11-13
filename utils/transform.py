@@ -7,7 +7,7 @@ import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
 
-def get_trfm(type):
+def get_trfm(type, args):
     # if type == 'train':
     #     return transforms.Compose([
     #         transforms.Resize((224, 448)),
@@ -25,15 +25,29 @@ def get_trfm(type):
     #     ])
 
     if type == 'train':
-        return A.Compose([
-            A.Resize(height=224, width=448),
-            A.Rotate(limit=10),
-            A.ColorJitter(brightness=0.5, hue=0.5, contrast=0.5),
+        trfms = [A.Resize(height=224, width=448)]
+        if args.Rotate:
+            trfms.append(A.Rotate(limit=10))
+        if args.ColorJitter:
+            trfms.append(A.ColorJitter(brightness=0.5, hue=0.5, contrast=0.5))
+        if args.CoarseDropout:
+            trfms.append(
+                A.CoarseDropout(max_holes=4, min_holes=1, max_height=224, max_width=112, min_height=20, min_width=20,
+                                p=0.75))
+        trfms.extend([
             A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-            A.CoarseDropout(max_holes=4, min_holes=1, max_height=224, max_width=112, min_height=20, min_width=20,
-                            p=0.75),
-            ToTensorV2(),
-        ])
+            ToTensorV2()])
+
+        return A.Compose(trfms)
+        # return A.Compose([
+        #     A.Resize(height=224, width=448),
+        #     A.Rotate(limit=10),
+        #     A.ColorJitter(brightness=0.5, hue=0.5, contrast=0.5),
+        #     A.CoarseDropout(max_holes=4, min_holes=1, max_height=224, max_width=112, min_height=20, min_width=20,
+        #                     p=0.75),
+        #     A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        #     ToTensorV2(),
+        # ])
     if type == 'val':
         return A.Compose([
             A.Resize(height=224, width=448),

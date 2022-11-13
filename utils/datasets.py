@@ -3,20 +3,33 @@ from typing import Any, Tuple
 import numpy as np
 from torchvision.datasets import CocoDetection
 
-from utils.transform import BatchTransform
+from utils.transform import BatchTransform, get_trfm
 
 
 class AvCocoDetection(CocoDetection):
-    def __init__(self, root, annFile, transforms=None, transform=None, target_transform=None):
+    def __init__(self, root, annFile, transforms=None, transform=None, target_transform=None, batch_transform=False):
         super(AvCocoDetection, self).__init__(root, annFile, transform, target_transform, transforms)
         self.summary = summarizeDataset(self)
+        self.batch_transform = batch_transform
+        self.collate_fn = collate_fn_batch if batch_transform else None
 
     def __getitem__(self, index: int) -> Tuple[Any, Any]:
         id = self.ids[index]
-        image = self._load_image(id)
-        target = self._load_target(id)
+        if self.batch_transform:
+            image = self._load_image(id)
+            target = self._load_target(id)
+        else:
+            transformed = self.transform(image=np.array(self._load_image(id)), target=self._load_target(id))
+            image = transformed['image']
+            target = transformed['target']
 
         return image, target
+
+
+def collate_fn_batch(batch):
+    # images = [i[0] for i in batch]
+    # return images
+    return batch
 
 
 def summarizeDataset(dataset: CocoDetection):
@@ -68,11 +81,12 @@ def summarizeDataset(dataset: CocoDetection):
     return summary
 
 
-def get_dataset(root, annFile, type):
+def get_dataset(root, annFile, type, args, batch_transform=False):
     dataset = AvCocoDetection(
         root=root,
         annFile=annFile,
-        transform=BatchTransform(type)
+        transform=BatchTransform(type) if batch_transform else get_trfm(type, args),
+        batch_transform=batch_transform
     )
 
     print('____________________')

@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import json
 
 
-dir_log = 'temp/ROC'
+dir_log = '/home/nick/projects/FSL/temp/ROC'
 
 dict_model_name_diaplay_name = {}
 model_names = [
@@ -25,15 +25,21 @@ model_names = [
     # 'efficientnet-b0_size_10',
     # 'efficientnet-b1_size_10',
     # 'efficientnet-b2_size_10',
-    'resnet50',
+
+    # 'resnet50',
     # 'resnet50_swav',
-    'resnet50_swav_new',
-    'resnet50_qry_1',
-    'efficientnet-b0_new',
-    'efficientnet-b1_new',
-    'efficientnet-b4_size_10',
+    # 'resnet50_swav_new',
+    # 'resnet50_qry_1',
+    # 'efficientnet-b0_new',
+    # 'efficientnet-b1_new',
+    # 'efficientnet-b4_size_10',
     # 'j',
+    # 'resnet50_png'
+    '15locations',
+    '4locations'
 ]
+type = 'Per Landmark'
+# type = 'Per Frame'
 
 AOC = {}
 F1 = {}
@@ -76,7 +82,10 @@ for model_name in model_names:
     for threshold in thresholds:
         TP_frame, FN_frame, TN_frame, FP_frame = 0, 0, 0, 0
         for location in locations:
-            [[_, _, _, _], [tp, fn, tn, fp]] = log[location][threshold]
+            if type == 'Per Frame':
+                [[_, _, _, _], [tp, fn, tn, fp]] = log[location][threshold]
+            elif type == 'Per Landmark':
+                [[tp, fn, tn, fp], [_, _, _, _]] = log[location][threshold]
             TP_frame += tp
             FN_frame += fn
             TN_frame += tn
@@ -112,7 +121,7 @@ for x, y in zip(list(dict_model_name_diaplay_name.values()), values):
     plt.text(x, y+0.05, '%.2f' %y, ha='center', va='bottom')
 plt.xticks(rotation=30)
 plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.3)
-plt.title('AOC')
+plt.title('AOC_{}'.format(type))
 plt.show()
 
 # plt.figure()
@@ -125,7 +134,7 @@ plt.show()
 plt.figure(figsize=(10, 6))
 for model_name, f1 in f1_plot.items():
     plt.plot(list(f1.keys()), list(f1.values()))
-plt.title('F1 Scores')
+plt.title('F1 Scores_{}'.format(type))
 plt.legend(list(f1_plot.keys()))
 plt.show()
 
@@ -143,7 +152,7 @@ for i, plot_item in enumerate(plot_items):
     plt.subplot(2, 1, i+1)
     for _, data in ys.items():
         plt.plot(x, data[plot_item])
-    plt.title(plot_item)
+    plt.title('{}_{}'.format(plot_item, type))
     plt.legend(legends)
 plt.show()
 

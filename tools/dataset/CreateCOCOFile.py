@@ -23,7 +23,7 @@ def generate_dict(laps_type, dir_direction, cat_id, img_id, ann_id):
         landmarks.sort()
         for landmark in landmarks:
             dir_landmark = osp.join(dir_lap, landmark)
-            if len(glob(osp.join(dir_landmark, '*.jpg'))) > 0:
+            if len(glob(osp.join(dir_landmark, '*.png'))) > 0:
                 cat_id += 1
                 cat = {
                     'location': location,
@@ -34,7 +34,7 @@ def generate_dict(laps_type, dir_direction, cat_id, img_id, ann_id):
                 }
                 categories.append(cat)
                 info['num_cats'] += 1
-            path_imgs = glob(osp.join(dir_landmark, '*.jpg'))
+            path_imgs = glob(osp.join(dir_landmark, '*.png'))
             path_imgs.sort()
             for path_img in path_imgs:
                 fname = osp.basename(path_img)
@@ -63,26 +63,45 @@ if __name__ == '__main__':
     # dataset_root = r'/volume1/dataset/av/sorted'
     # dir_output = r'/var/services/homes/SDB/Drive/Projects/AV/code/coco/coco_indoor_exclude_Bainer2F_Kemper3F'
 
-    dataset_root = r'/home/nick/dataset/dual_fisheye_indoor'
-    dir_output = r'/home/nick/projects/FSL/coco/dual_fisheye/coco_exclude_Ghausi2F_Lounge_Kemper3F'
+    dataset_root = r'/home/nick/dataset/dual_fisheye_indoor/PNG'
+    # dir_output = r'/home/nick/projects/FSL/coco/dual_fisheye/15_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F/PNG'
+    dir_output = r'/home/nick/projects/FSL/coco/dual_fisheye/cross_test/3'
+
+    if not osp.exists(dir_output):
+        os.makedirs(dir_output)
 
     exclude_locations = [
-        'Ghausi2F_Lounge', 'Kemper3F'
+        'ASB1F',
+        'ASB2F',
+        'Bainer2F',
+        'EngineerngLibrary',
+        'EnvironmentalScience2F',
+        'EnvironmentalScience3F',
+        'Ghausi2F',
+        'Ghausi2F_Lounge',
+        'PhysicsBuilding',
+        'PhysicsBuilding2F',
+        'PhysicsBuildingGF',
+        'Walker',
+        'WestVillageMailbox',
+        'WestVillageOffice',
+        'WestVillageStudyRoom',
     ]
     # exclude_locations = [
-    #     'ASB2F', 'Bainer2F', 'Ghausi2F', 'Ghausi2F_Lounge', 'Kemper3F'
+    #     'Kemper3F', 'WestVillageStudyHall', 'EnvironmentalScience1F'
     # ]
     # exclude_locations = []
 
     info = {
         'description': 'Exclude:' + str(exclude_locations),
         'directions': ['cw', 'ccw'],
+        'total_locations': 18,
         'num_landmark': 8,
         'num_cats': 0
     }
 
-    # for dataset_type in ['test']:
-    for dataset_type in ['train', 'val']:
+    for dataset_type in ['test']:
+    # for dataset_type in ['train', 'val']:
         cat_id = -1
         img_id = -1
         ann_id = -1
@@ -91,10 +110,12 @@ if __name__ == '__main__':
         categories = []
         for dir_location in [i for i in glob(osp.join(dataset_root, '*')) if osp.isdir(i) and osp.basename(i) not in exclude_locations]:
             location = osp.basename(dir_location)
-            num_laps = len([i for i in glob(osp.join(dir_location, '*', '*')) if osp.basename(i) != '@eaDir'])
-            num_val = 2 if num_laps > 8 else 1
+            num_laps = len([i for i in glob(osp.join(dir_location, 'c*', '*')) if osp.basename(i) != '@eaDir'])
+            assert num_laps % 2 == 0, 'Odd number of laps in {}'.format(location)
+            num_pairs = int(num_laps / 2)
+            num_val = 2 if num_pairs >= 4 else 1
             num_test = 0
-            num_train = int(num_laps / 2) - num_val - num_test
+            num_train = num_pairs - num_val - num_test
             if dataset_type in ['train', 'val']:
                 for direction in ['cw', 'ccw']:
                     dir_direction = osp.join(dataset_root, location, direction)
@@ -128,7 +149,7 @@ if __name__ == '__main__':
                     cat_id, img_id, ann_id = generate_dict([lap_ccw], osp.join(dataset_root, location, 'ccw'), cat_id, img_id, ann_id)
                     time_cw = lap_cw.split('_')[1]
                     time_ccw = lap_ccw.split('_')[1]
-                    save_json(osp.join(dir_output, '_'.join([dataset_type, location, time_cw, time_ccw]) + '.json'),
+                    save_json(osp.join(dir_output, 'test', '_'.join([dataset_type, location, time_cw, time_ccw]) + '.json'),
                               info, images, annotations, categories)
 
             # if dataset_type == 'test':

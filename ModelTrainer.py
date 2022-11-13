@@ -1,6 +1,7 @@
 import os
 import os.path as osp
 import sys
+import argparse
 
 import numpy as np
 import pandas as pd
@@ -17,6 +18,38 @@ from tqdm import tqdm
 from models.StampNet import load_model
 from utils.loader import ConsecLoader
 from utils.datasets import get_dataset
+from utils.utils import str2bool
+
+
+parser = argparse.ArgumentParser(description='Process some integers.')
+parser.add_argument('-n', '--name', type=str, required=True,
+                    help='Model name')
+parser.add_argument('-device', '--device', type=int, required=False,
+                    help='Device ID')
+parser.add_argument('-b', '--backbone', default='resnet50', type=str, required=False,
+                    help='Model backbone')
+parser.add_argument('-aug_r', '--Rotate', default=False, type=str2bool, required=False,
+                    help='A.Rotate (default: False)')
+parser.add_argument('-aug_j', '--ColorJitter', default=False, type=str2bool, required=False,
+                    help='A.ColorJitter (default: False)')
+parser.add_argument('-aug_d', '--CoarseDropout', default=False, type=str2bool, required=False,
+                    help='A.CoarseDropout (default: False)')
+parser.add_argument('-epoch_pre', '--epoch_pre', default=3, type=int, required=False,
+                    help='Number of epochs in pre-training (default: 3)')
+parser.add_argument('-epoch_fine', '--epoch_fine', default=30, type=int, required=False,
+                    help='Number of epochs in fine-tuning (default: 30)')
+parser.add_argument('-batch_pre', '--batch_pre', default=16, type=int, required=False,
+                    help='Batch size in pre-training (default: 16)')
+parser.add_argument('-batch_fine', '--batch_fine', default=3, type=int, required=False,
+                    help='Batch size in fine-tuning (default: 3)')
+parser.add_argument('-size_sup', '--sup_size', default=10, type=int, required=False,
+                    help='Size of the support set (default: 10)')
+parser.add_argument('-size_qry', '--qry_size', default=10, type=int, required=False,
+                    help='Size of the query set (default: 10)')
+parser.add_argument('-num_qry', '--qry_num', default=6, type=int, required=False,
+                    help='Size of the query set (default: 6)')
+
+args = parser.parse_args()
 
 print(torch.cuda.is_available())
 # torch.autograd.set_detect_anomaly(True)
@@ -27,33 +60,34 @@ np.random.seed(0)
 torch.manual_seed(0)
 
 if sys.platform == 'linux':
-    dir_dataset = '/home/nick/dataset/dual_fisheye_indoor/'
-    dir_coco = '/home/nick/projects/FSL/coco/dual_fisheye/exclude_Ghausi2F_Lounge_Kemper3F'
+    dir_dataset = '/home/nick/dataset/dual_fisheye_indoor/PNG'
+    dir_coco = '/home/nick/projects/FSL/coco/dual_fisheye/15_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F/PNG'
     dir_output = '/home/nick/projects/FSL/output'
 else:
     dir_dataset = '/Users/shidebo/dataset/AV/Sorted/'
 
-device = 1 if torch.cuda.is_available() else "cpu"  # use GPU if available
-n_epochs_pre = 3
-n_epochs_fine = 30
+device = args.device if torch.cuda.is_available() else "cpu"  # use GPU if available
+backbone = args.backbone
+n_epochs_pre = args.epoch_pre
+n_epochs_fine =args.epoch_fine
 n_episodes = 16
-batch_pre = 16
-batch_fine = 2
-sup_size = 10
-qry_size = 10
-qry_num = 5
+batch_pre = args.batch_pre
+batch_fine = args.batch_fine
+sup_size = args.sup_size
+qry_size = args.qry_size
+qry_num = args.qry_num
 channels, im_height, im_width = 3, 224, 224
-lr = 1e-3
+lr = 1e-4  # 1e-3
 stats_freq = 1
-sch_param_1 = 5
+sch_param_1 = 10
 sch_param_2 = 0.5
 FC_len = 1000
-course_name = 'dual_fisheye_exclude_Ghausi2F_Lounge_Kemper3F_batch_3_neg_50_coarse_only'
+course_name = 'dual_fisheye_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F_batch_3_neg_50_{}'.format(args.name)
 savename = course_name+'_batch'+str(batch_pre)+'_' + str(sup_size)+'-shot_lr_'+str(lr)+'_lrsch_'+str(sch_param_2)+'_'+str(sch_param_1)+'_'+str(n_episodes)+'episodes'
 print(savename)
 
-dataset_train = get_dataset(dir_dataset, osp.join(dir_coco, 'train.json'), 'train')
-dataset_val = get_dataset(dir_dataset, osp.join(dir_coco, 'val.json'), 'val')
+dataset_train = get_dataset(dir_dataset, osp.join(dir_coco, 'train.json'), 'train', args)
+dataset_val = get_dataset(dir_dataset, osp.join(dir_coco, 'val.json'), 'val', args)
 
 
 # Train def-------------------------------------------------------------------------
@@ -71,7 +105,7 @@ def ftrain(model, optimizer, dataset_train, dataset_val, sup_size, qry_size, qry
         train_x (np.array): images of training set
         train_y(np.array): labels of training set
         n_way (int): number of classes
-   ftrain     n_support (int): number of labeled examples per class in the support set
+    ftrain     n_support (int): number of labeled examples per class in the support set
         n_query (int): number of labeled examples per class in the query set
         max_epoch (int): max epochs to train on
         epoch_size (int): episodes per epoch
@@ -107,9 +141,9 @@ def ftrain(model, optimizer, dataset_train, dataset_val, sup_size, qry_size, qry
             if epoch == 0:
                 acc_first_epoch['train'].append(running_acc)
                 loss_first_epoch['train'].append(running_loss)
-                if episode_batch < 20:
-                    print('Epoch 1 batch {:d} -- Loss: {:.4f} Acc: {:.4f}'.format(episode_batch, running_loss,
-                                                                                  running_acc)) #print first few batch results
+                # if episode_batch < 20:
+                #     print('Epoch 1 batch {:d} -- Loss: {:.4f} Acc: {:.4f}'.format(episode_batch, running_loss,
+                #                                                                   running_acc)) #print first few batch results
         epoch += 1
         if epoch % stats_freq == 0:
             print('Epoch {:d} -- Loss: {:.4f} Acc: {:.4f}'.format(epoch, running_loss, running_acc))
@@ -155,7 +189,7 @@ def ftrain(model, optimizer, dataset_train, dataset_val, sup_size, qry_size, qry
 
 # Begin pre-training------------------------------------------------------------------------
 
-model = load_model(FCdim=FC_len, input_size=qry_num, device=device)
+model = load_model(FCdim=FC_len, backbone=backbone, device=device)
 
 # shows the number of trainable parameters----------------------------------------------
 model_parameters = filter(lambda p: p.requires_grad, model.parameters())
@@ -322,9 +356,11 @@ max_index = acc_list.index(max_value)
 print('Best epoch: {}'.format(max_index+1)) #prints the epoch number of fine-tuned model with max accuracy
 
 # Load the best-performing model and save with suitable name and format for evaluation----------------------------------
-model = torch.load('ckpt/model_best_' + savename + '.pth').cuda(device) #loads the fine-tuned model with highest validation accuracy
+path_model_best = 'ckpt/model_best_' + savename + '.pth'
+model = torch.load(path_model_best).cuda(device) #loads the fine-tuned model with highest validation accuracy
 encoder = model.encoder
 cov_module = model.cov_module
 classifier = model.classifier
 model = nn.Sequential(OrderedDict([('encoder', encoder), ('cov', cov_module), ('classifier', classifier)]))
 torch.save(model, 'ckpt/ModelMCN_'+course_name+'.pth')
+os.remove(path_model_best)

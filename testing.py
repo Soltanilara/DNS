@@ -1,25 +1,32 @@
 import os
 import os.path as osp
+from time import time, sleep
+import argparse
+
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
-from torchvision import transforms, datasets
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from time import time
-import plotly.express as px
 import json
 
 from utils.loader import TestLoader
-from utils.utils import summarizeDataset, get_imgId2landmarkId, gen_6_proto
+from utils.utils import get_imgId2landmarkId, gen_6_proto
 from utils.datasets import AvCocoDetection
+
 
 def encode_one_side_landmark(model, landmarks, num_landmarks):
 
-    indiv_protos = model.encoder(landmarks)
-    indiv_eigs = model.cov(indiv_protos) + 1e-8
+    indiv_protos = None
+    indiv_eigs = None
+    for i in range(16):
+        landmarks_i = landmarks[i*60: (i+1)*60, :, :, :]
+        indiv_protos_i = model.encoder(landmarks_i)
+        indiv_eigs_i = model.cov(indiv_protos_i) + 1e-8
+        indiv_protos = torch.cat([indiv_protos, indiv_protos_i], dim=0) if indiv_protos is not None else indiv_protos_i
+        indiv_eigs = torch.cat([indiv_eigs, indiv_eigs_i], dim=0) if indiv_eigs is not None else indiv_eigs_i
 
     indiv_protos = indiv_protos.view([num_landmarks, 6, 10] + [indiv_protos.shape[-1]])
     indiv_eigs = indiv_eigs.view([num_landmarks, 6, 10] + [indiv_eigs.shape[-1]])
@@ -30,7 +37,7 @@ def encode_one_side_landmark(model, landmarks, num_landmarks):
     return proto_sup, eigs_sup
 
 
-def LoadModel_LandmarkStats(device, loader, model_path):
+def LoadModel_LandmarkStats(device, loader, model):
     """
     Returns the loaded model, as well as necessary statistics from the landmark classes.
     Path landmark image folders are assumed to be under root_dir/landmarks and named as 0, 1, 2, etc.
@@ -40,24 +47,12 @@ def LoadModel_LandmarkStats(device, loader, model_path):
     :param model_path: name of the model to be loaded
     """
 
-    print('loading model: {}'.format(model_path))
-    model = torch.load(model_path, map_location='cpu').cuda(device)
-    model.eval()
-    for param in model.parameters():
-        param.requires_grad = False
     landmarks = loader.get_all_landmarks()
     landmarks = gen_6_proto(landmarks)
     num_landmarks = landmarks.shape[0]
 
     landmarks = landmarks.view([-1] + list(landmarks.shape)[-3:]).cuda(device)
-    # indiv_protos = model.encoder(landmarks)
-    # indiv_eigs = model.cov(indiv_protos) + 1e-8
-    #
-    # indiv_protos = indiv_protos.view([num_landmarks, 6, 10] + [indiv_protos.shape[-1]])
-    # indiv_eigs = indiv_eigs.view([num_landmarks, 6, 10] + [indiv_eigs.shape[-1]])
-    #
-    # proto_sup = torch.mean(indiv_protos, dim=2).squeeze()
-    # eigs_sup = torch.mean(indiv_eigs, dim=2).squeeze()
+
     proto_sup_l, eigs_sup_l = encode_one_side_landmark(model, landmarks[:, :, :, :224], num_landmarks)
     proto_sup_r, eigs_sup_r = encode_one_side_landmark(model, landmarks[:, :, :, 224:], num_landmarks)
 
@@ -67,8 +62,10 @@ def LoadModel_LandmarkStats(device, loader, model_path):
 def encode_one_side_match(model, image):
     qry_proto = model.encoder(image.cuda(device)).squeeze()
     qry_eigs = model.cov(qry_proto).squeeze() + 1e-8
-    qry_proto = torch.mean(qry_proto, dim=0)
-    qry_eigs = torch.mean(qry_eigs, dim=0)
+
+    if len(qry_proto.shape) == 2:
+        qry_proto = torch.mean(qry_proto, dim=0)
+        qry_eigs = torch.mean(qry_eigs, dim=0)
 
     return qry_proto, qry_eigs
 
@@ -110,144 +107,198 @@ def MatchDetector(model, image, lm_proto, lm_eigs, probabilities, threshold, dev
     return match, probabilities
 
 
+def plot_figure(location, prob, borders, xlabel, ylabel, path_save):
+    fig = plt.figure(figsize=(16, 8))
+    ax = fig.add_subplot(111)
+    # ax = fig_frame.add_subplot(len(locations), 2, fig_ind)
+    # fig_ind += 1
+    ax.set_xlabel(xlabel, fontsize=20)
+    ax.set_ylabel(ylabel, fontsize=20)
+    ax.plot(prob)
+    ax.grid()
+    plt.title(location)
+    plt.vlines(borders['start'], 0, 1, 'g', 'dashed')
+    plt.vlines(borders['end'], 0, 1, 'r', 'dashed')
+    plt.ylim(0, 1)
+    plt.xlim(0, i)
+    # plt.show
+    plt.savefig(osp.join(path_save), dpi=300)
+    plt.close()
+
+
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-n', '--name', type=str, required=True,
+                        help='Model name')
+    parser.add_argument('-d', '--device', type=int, required=False, default=0,
+                        help='device ID')
+    parser.add_argument('-s', '--size', type=int, required=False, default=10,
+                        help='size of the support and query set')
+    args = parser.parse_args()
+    model_name = args.name
+
     ts = time()
 
     np.random.seed(0)
     torch.manual_seed(0)
 
-    root_dataset = '/home/nick/dataset/dual_fisheye_indoor/'
-    dir_coco = 'coco/dual_fisheye'
-    model_path = '/home/nick/projects/FSL/ckpt/ModelMCN_dual_fisheye_exclude_Bainer2F_Kemper3F_batch_3_neg_50_erase.pth'
-    dir_output = 'output'
+    root_dataset = '/home/nick/dataset/dual_fisheye_indoor/PNG'
+    dir_coco = 'coco/dual_fisheye/cross_test/3'
+    # model_path = 'ckpt/ModelMCN_dual_fisheye_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F_batch_3_neg_50_15locations.pth'
+    model_path = 'ckpt/ModelMCN_dual_fisheye_exclude_Ghausi2F_Lounge_Kemper3F_batch_3_neg_50_resnet50_png.pth'
+    if not osp.exists(model_path):
+        print('Waiting for model {}'.format(model_path))
+    while not osp.exists(model_path):
+        sleep(600)
+
+    dir_log = osp.join('output', 'log', model_name)
+    if not osp.exists(dir_log):
+        os.makedirs(dir_log)
 
     # locations = ['ASB1F', 'ASB1F_New', 'ASB2F', 'Bainer2F', 'Ghausi2F', 'Ghausi2F_Lounge', 'Kemper3F', 'Math_outside', 'ASB_Outside', 'Facility_outside']
-    locations = ['ASB1F', 'ASB2F', 'Bainer2F', 'Ghausi2F', 'Ghausi2F_Lounge', 'Kemper3F']
-    # locations = ['Kemper3F']
-    # locations = ['ASB2F']
+    # locations = ['ASB1F', 'ASB2F', 'Bainer2F', 'Ghausi2F', 'Ghausi2F_Lounge', 'Kemper3F']
+    # locations = ['Bainer2F']
+    # locations = ['Ghausi2F_Lounge', 'Bainer2F']
+    locations = ['EnvironmentalScience1F', 'Kemper3F', 'WestVillageStudyHall']
 
-    device = 0
+    device = args.device
     channels, im_height, im_width = 3, 224, 448
     threshold = 0.5
-    qry_size = 10
+    qry_size = args.size
 
-    transform = transforms.Compose([
-        transforms.Resize((im_height, im_width)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    transform = A.Compose([
+        A.Resize(height=im_height, width=im_width),
+        A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ToTensorV2(),
     ])
-    # transform = A.Compose([
-    #     A.Crop(x_min=0, y_min=0, x_max=520, y_max=192, always_apply=True),
-    #     A.Resize(height=224, width=448),
-    #     A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    #     ToTensorV2(),
-    # ])
+
+    print('loading model: {}'.format(model_path))
+    model = torch.load(model_path, map_location='cpu').cuda(device)
+    model.eval()
+    for param in model.parameters():
+        param.requires_grad = False
 
     # fig_frame = plt.figure(figsize=(32, 8*len(locations)/2))
     # fig_average = plt.figure(figsize=(32, 8*len(locations)/2))
     # fig_ind = 1
 
+    logs = {}
     for i, location in enumerate(locations):
+        landmark_total = 0
+        landmark_matched = 0
+        runs_cnt = 0
+        frame_probs = {}
+        moving_avg_probs = {}
+        test_lap_borders = {}
+        dir_location = osp.join(dir_coco, location)
+        laps = os.listdir(dir_location)
         print('[{}/{}] Testing: {}'.format(i+1, len(locations), location))
-        # coco_path_test = osp.join(dir_coco, 'test', 'test_'+location+'.json')
-        # coco_path_landmark = osp.join(dir_coco, 'test', 'test_'+location+'_landmark.json')
-        coco_path_test = osp.join(dir_coco, 'test', 'change_lap', 'test_'+location+'.json')
-        coco_path_landmark = osp.join(dir_coco, 'test', 'change_lap', 'test_'+location+'_landmark.json')
+        for lap_landmark in laps:
+            for lap_test in laps:
+                if lap_test == lap_landmark:
+                    continue
+                runs_cnt += 1
+                coco_path_test = osp.join(dir_location, lap_test)
+                coco_path_landmark = osp.join(dir_location, lap_landmark)
 
-        dataset_test = AvCocoDetection(
-                root=root_dataset,
-                annFile=coco_path_test,
-                transform=transform
-            )
-        dataset_landmark = AvCocoDetection(
-                root=root_dataset,
-                annFile=coco_path_landmark,
-                transform=transform
-            )
-        dataloader_test = TestLoader(dataset_test, summarizeDataset(dataset_test))
-        dataloader_landmark = TestLoader(dataset_landmark, summarizeDataset(dataset_landmark))
+                dataset_test = AvCocoDetection(
+                    root=root_dataset,
+                    annFile=coco_path_test,
+                    transform=transform
+                )
+                dataset_landmark = AvCocoDetection(
+                    root=root_dataset,
+                    annFile=coco_path_landmark,
+                    transform=transform
+                )
 
-        model, proto_sup, eigs_sup = LoadModel_LandmarkStats(device, dataloader_landmark, model_path)
+                dataloader_test = TestLoader(dataset_test)
+                dataloader_landmark = TestLoader(dataset_landmark)
 
-        landmark = 0
-        i = 0
-        frame_prob = []
-        moving_avg_prob = []
-        qry_imgs = None
-        # TODO use window size between 3 and 6
-        probabilities = torch.zeros(6, requires_grad=False).cuda(device)
-        imgId2landmarkId, landmark_borders = get_imgId2landmarkId(dataset_test)
-        dataloader = DataLoader(dataset=dataset_test, shuffle=False, batch_size=1, pin_memory=False, drop_last=False)
-        for i, img in enumerate(tqdm(dataloader)):
-            if qry_imgs is None:
-                qry_imgs = img[0]
-                frame_prob += [0]
-                moving_avg_prob += [0]
-            elif qry_imgs.shape[0] < qry_size:
-                qry_imgs = torch.cat([qry_imgs, img[0]], dim=0)
-                frame_prob += [0]
-                moving_avg_prob += [0]
-            else:
-                qry_imgs = torch.cat([qry_imgs[1:], img[0]], dim=0)
-                landmark = imgId2landmarkId[i]
-                lm_proto = proto_sup[landmark, :]
-                lm_eigs = eigs_sup[landmark, :]
-                match, probabilities = MatchDetector(model, qry_imgs, lm_proto, lm_eigs, probabilities, threshold, device)
-                frame_prob += [probabilities[-1].cpu().item()]
-                moving_avg_prob += [probabilities.mean().cpu().item()]
+                model, proto_sup, eigs_sup = LoadModel_LandmarkStats(device, dataloader_landmark, model)
 
-                if match:
-                    print('\nUpdate to landmark ', str(landmark), ' at frame ', i)
+                num_landmark = len(dataloader_landmark.pos_catIds)
+                matched = np.zeros(num_landmark)
+                landmark = 0
+                i = 0
+                frame_prob = []
+                moving_avg_prob = []
+                qry_imgs = None
+                # TODO use window size between 3 and 6
+                probabilities = torch.zeros(15, requires_grad=False).cuda(device)
+                imgId2landmarkId, landmark_borders = get_imgId2landmarkId(dataset_test)
+                dataloader = DataLoader(
+                    dataset=dataset_test, shuffle=False, batch_size=1, pin_memory=False, drop_last=False)
+                pbar = tqdm(dataloader)
+                for i, img in enumerate(pbar):
+                    if qry_imgs is None:
+                        qry_imgs = img[0]
+                        frame_prob += [0]
+                        moving_avg_prob += [0]
+                    elif qry_imgs.shape[0] < qry_size:
+                        qry_imgs = torch.cat([qry_imgs, img[0]], dim=0)
+                        frame_prob += [0]
+                        moving_avg_prob += [0]
+                    else:
+                        qry_imgs = torch.cat([qry_imgs[1:], img[0]], dim=0)
+                        landmark = imgId2landmarkId[i]
+                        lm_proto = proto_sup[landmark, :]
+                        lm_eigs = eigs_sup[landmark, :]
+                        match, probabilities = MatchDetector(
+                            model, qry_imgs, lm_proto, lm_eigs, probabilities, threshold, device)
+                        frame_prob += [probabilities[-1].cpu().item()]
+                        moving_avg_prob += [probabilities.mean().cpu().item()]
 
+                        if match:
+                            # print('\nUpdate to landmark ', str(landmark), ' at frame ', i)
+                            matched[landmark] = 1
+                            pbar.set_description('runs: [{}/{}], matched: [{}/{}]'.format(
+                                runs_cnt, len(laps)*(len(laps)-1), int(np.sum(matched)), len(matched)))
+                landmark_total += num_landmark
+                landmark_matched += np.sum(matched)
 
-        # plotting--------------------------------------------------------------------------------------------------------------
-        dir_figure = osp.join(dir_output, 'figures')
-        if not osp.exists(dir_figure):
-            os.makedirs(dir_figure)
+                dir_output_location = osp.join(dir_log, 'figures', location)
+                if not osp.exists(dir_output_location):
+                    os.makedirs(dir_output_location)
+                name_landmark = '_'.join(lap_landmark[:-5].split('_')[-2:])
+                name_test = '_'.join(lap_test[:-5].split('_')[-2:])
+                postfix = '{}_memory_{}_test_{}'.format(location, name_landmark, name_test)
+                plot_figure(
+                    location=location,
+                    prob=frame_prob,
+                    borders=landmark_borders,
+                    xlabel='Frame number',
+                    ylabel='Landmark frame probability',
+                    path_save=osp.join(dir_output_location, 'landmark frame probability_'+postfix+'.png')
+                )
+                plot_figure(
+                    location=location,
+                    prob=moving_avg_prob,
+                    borders=landmark_borders,
+                    xlabel='Frame number',
+                    ylabel='Moving average probability',
+                    path_save=osp.join(dir_output_location, 'Moving average probability_'+postfix+'.png')
+                )
+                frame_probs[postfix] = frame_prob
+                moving_avg_probs[postfix] = moving_avg_prob
+                test_lap_borders[postfix] = landmark_borders
 
-        fig_frame = plt.figure(figsize=(16, 8))
-        ax = fig_frame.add_subplot(111)
-        # ax = fig_frame.add_subplot(len(locations), 2, fig_ind)
-        # fig_ind += 1
-        ax.set_xlabel('Frame number', fontsize=20)
-        ax.set_ylabel('Landmark frame probability', fontsize=20)
-        ax.plot(frame_prob)
-        ax.grid()
-        plt.title(location)
-        plt.vlines(landmark_borders['start'], 0, 1, 'g', 'dashed')
-        plt.vlines(landmark_borders['end'], 0, 1, 'r', 'dashed')
-        plt.ylim(0, 1)
-        plt.xlim(0, i)
-        # plt.show
-        plt.savefig(osp.join(dir_figure, 'landmark frame probability_'+location+'.png'), dpi=300)
-        # plt.close()
+        landmark_matched = int(landmark_matched)
+        landmark_total = int(landmark_total)
+        log = '{}: matched [{}/{}], recognition rate {}'.format(location, landmark_matched, landmark_total,
+                                                                landmark_matched/landmark_total)
+        print(log)
+        logs[location] = log
+        with open(osp.join(dir_log, osp.basename(model_path)+'.json'), 'w') as f:
+            json.dump(logs, f, indent=4)
+        with open(osp.join(dir_log, 'plot_log_{}.json'.format(location)), 'w') as f:
+            json.dump({
+                'frame_probs': frame_probs,
+                'moving_avg_probs': moving_avg_probs,
+                'test_lap_borders': test_lap_borders,
+            }, f, indent=4)
 
-        fig_average = plt.figure(figsize=(16, 8))
-        ax = fig_average.add_subplot(111)
-        # ax = fig_average.add_subplot(len(locations), 2, fig_ind)
-        # fig_ind += 1
-        ax.set_xlabel('Frame number', fontsize=20)
-        ax.set_ylabel('Moving average probability', fontsize=20)
-        ax.plot(moving_avg_prob)
-        ax.grid()
-        plt.title(location)
-        plt.vlines(landmark_borders['start'], 0, 1, 'g', 'dashed')
-        plt.vlines(landmark_borders['end'], 0, 1, 'r', 'dashed')
-        plt.ylim(0, 1)
-        plt.xlim(0, i)
-        # plt.show
-        plt.savefig(osp.join(dir_figure, 'Moving average probability_' + location + '.png'), dpi=300)
-        # plt.close()
+    print(time() - ts)
 
-        print(time() - ts)
-
-        # plot_data = {
-        #     'landmark_borders': landmark_borders,
-        #     'frame_prob': frame_prob,
-        #     'moving_avg_prob': moving_avg_prob
-        # }
-        # with open(root_dataset + 'plot_data.json', 'w') as f:
-        #     json.dump(plot_data, f)
-        # print('Plot data saved')
     # fig_frame.savefig(osp.join(dir_figure, 'landmark frame probability' + '.png'), dpi=600)
     # fig_average.savefig(osp.join(dir_figure, 'Moving average probability' + '.png'), dpi=600)

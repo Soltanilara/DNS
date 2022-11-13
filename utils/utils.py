@@ -79,3 +79,7 @@ def gen_6_proto(landmarks):
         landmarks_all = landmarks_6 if landmarks_all is None else torch.cat([landmarks_all, landmarks_6])
     return landmarks_all
 
+
+def str2bool(v):
+    return v.lower() in ("yes", "true", "t", "1")
+

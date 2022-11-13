@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 from torch.autograd import Variable
+from torchvision import models
 
 
 def load_model(**kwargs):
@@ -10,12 +11,20 @@ def load_model(**kwargs):
         FCdim: latent space dimensionality
     """
     FCdim = kwargs['FCdim']
+    backbone = kwargs['backbone']
     device = kwargs['device']
 
-    encoder = torch.hub.load('facebookresearch/swav:main', 'resnet50') #pretrained ResNet-50
+    if backbone == 'resnet50_swav':
+        encoder = torch.hub.load('facebookresearch/swav:main', 'resnet50')  # unsupervised trained
+    elif backbone == 'resnet50':
+        encoder = models.resnet50(pretrained=True)  # supervised trained
+    elif 'efficientnet' in backbone:
+        from efficientnet_pytorch import EfficientNet
+        encoder = EfficientNet.from_pretrained(backbone)
+
     for param in encoder.parameters():
         param.requires_grad = False  #freezes the pretrained model parameters
-    encoder.fc = nn.Linear(2048, FCdim)
+    encoder.fc = nn.Linear(2048, FCdim)  #todo: try different FCdim
 
     cov_module = nn.Sequential(
         nn.Linear(FCdim, FCdim),
@@ -24,7 +33,6 @@ def load_model(**kwargs):
         nn.Softplus()
     )
 
-    # todo: use a more complicated structure
     classifier = nn.Sequential(
         nn.Linear(FCdim*2, FCdim*2),
         nn.ELU(),
@@ -90,11 +98,6 @@ class StampNet(nn.Module):
         qry_num = int((sample['images'].shape[1] - sup_size) / qry_size)
         target_inds = Variable(sample['labels'], requires_grad=False).cuda(self.device)
 
-        # x_support = sample_images[:, :sup_size]
-        # x_query = sample_images[:, sup_size:]
-
-        # Todo: reduce variables to save RAM
-
         x_support_l = sample_images[:, :sup_size, :, :, :224]
         x_support_r = sample_images[:, :sup_size, :, :, 224:]
         x_query_l = sample_images[:, sup_size:, :, :, :224]
@@ -107,14 +110,14 @@ class StampNet(nn.Module):
         pred = self.classifier(dists).view(batch, qry_num)
         pred_label = torch.round(pred)
 
-        loss = nn.BCELoss()
-        loss_val = loss(pred, target_inds)
+        criterion = nn.BCELoss()
+        loss = criterion(pred, target_inds)
 
-        acc_val = torch.eq(pred_label, target_inds).float().mean()
+        acc = torch.eq(pred_label, target_inds).float().mean()
         acc_means = torch.eq(pred_label, target_inds).view(batch, -1).float().mean(1)
 
-        return loss_val, {
-            'loss': loss_val.item(),
-            'acc': acc_val.item(),
+        return loss, {
+            'loss': loss.item(),
+            'acc': acc.item(),
             'acc_means': acc_means
         }

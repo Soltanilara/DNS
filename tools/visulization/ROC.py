@@ -6,7 +6,8 @@ from matplotlib import pyplot as plt
 
 
 if __name__ == '__main__':
-    locations = ['Bainer2F', 'Ghausi2F_Lounge']
+    # locations = ['Bainer2F', 'Ghausi2F_Lounge']
+    locations = ['EnvironmentalScience1F', 'Kemper3F', 'WestVillageStudyHall']
     model_names = [
         # 'base',
         # 'r', 'j', 'd',
@@ -25,22 +26,27 @@ if __name__ == '__main__':
         # 'efficientnet-b1_size_10',
         # 'efficientnet-b2_size_10',
 
-        'efficientnet-b4_size_10',
-        'resnet50',
+        # 'efficientnet-b4_size_10',
+        # 'resnet50',
         # 'resnet50_swav',
 
-        'resnet50_swav_new',
-        'resnet50_qry_1',
-        'efficientnet-b0_new',
-        'efficientnet-b1_new',
-        'efficientnet-b2_new',
+        # 'resnet50_swav_new',
+        # 'resnet50_qry_1',
+        # 'efficientnet-b0_new',
+        # 'efficientnet-b1_new',
+        # 'efficientnet-b2_new',
+
+        # 'resnet50_png',
+
+        # '15locations',
+        '4locations',
 
     ]
     for model_name in model_names:
         dict_threshold_result = {}
-        path_save = osp.join('temp/ROC', model_name+'.json')
+        path_save = osp.join('/home/nick/projects/FSL/temp/ROC', model_name+'.json')
         for location in locations:
-            path_log = '/Users/shidebo/Downloads/workstation/dual_fisheye/exclude_Ghausi2F_Lounge_Kemper3F/{}/plot_log_{}.json'.format(model_name, location)
+            path_log = '/home/nick/projects/FSL/output/log/{}/plot_log_{}.json'.format(model_name, location)
 
             with open(path_log, 'r') as f:
                 log = json.load(f)

@@ -3,12 +3,6 @@ import torch
 from torch.utils.data import DataLoader, Subset
 
 
-def collate_fn(batch):
-    # images = [i[0] for i in batch]
-    # return images
-    return batch
-
-
 class ConsecLoader:
     def __init__(self, batch, sup_size, qry_size, qry_num, dataset):
         self.batch = batch
@@ -42,8 +36,11 @@ class ConsecLoader:
             debug_info['sup_inds'].append(sup_inds)
         else:
             loader_sup = DataLoader(dataset=Subset(self.dataset, sup_inds), shuffle=False, batch_size=self.sup_size,
-                                    pin_memory=False, drop_last=False, collate_fn=collate_fn)
-            sample = self.dataset.transform.apply(next(iter(loader_sup)))
+                                    pin_memory=True, drop_last=False, collate_fn=self.dataset.collate_fn)
+            if self.dataset.batch_transform:
+                sample = self.dataset.transform.apply(next(iter(loader_sup)))
+            else:
+                sample = next(iter(loader_sup))[0]
 
         # select laps with/without replacement and sample a positive query set from each
         laps_direction = self.location2Lap[cat['location']][cat['direction']]
@@ -52,7 +49,7 @@ class ConsecLoader:
             try:
                 qry_pos_cat_id = [i for i in self.lap2CatId[lap] if self.dataset.coco.loadCats(i)[0]['name'] == cat['name']][0]
             except:
-                pass
+                print(lap)
             qry_pos_img_ids = self.dataset.coco.getImgIds(catIds=qry_pos_cat_id)
             qry_pos_l = sup_l
             while qry_pos_cat_id == cat['id'] and qry_pos_l == sup_l:
@@ -64,15 +61,21 @@ class ConsecLoader:
                 debug_info['qry_pos_inds'].append(qry_pos_inds)
             else:
                 loader_qry = DataLoader(dataset=Subset(self.dataset, qry_pos_inds), shuffle=False, batch_size=self.qry_size,
-                                        pin_memory=False, drop_last=False, collate_fn=collate_fn)
-                sample_qry = self.dataset.transform.apply(next(iter(loader_qry)))
+                                        pin_memory=True, drop_last=False, collate_fn=self.dataset.collate_fn)
+                if self.dataset.batch_transform:
+                    sample_qry = self.dataset.transform.apply(next(iter(loader_qry)))
+                else:
+                    sample_qry = next(iter(loader_qry))[0]
                 sample = torch.cat([sample, sample_qry], dim=0)
                 label.append(1.)
 
         # select laps with/without replacement and sample a negative query set from each
         laps = list(np.random.choice(list(laps_direction), self.qry_num-int(self.qry_num/2), replace=True))
         for lap in laps:
-            pos_cat_id = [i for i in self.lap2CatId[lap] if self.dataset.coco.loadCats(i)[0]['name'] == cat['name']][0]
+            try:
+                pos_cat_id = [i for i in self.lap2CatId[lap] if self.dataset.coco.loadCats(i)[0]['name'] == cat['name']][0]
+            except:
+                pass
             qry_neg_cat_id = pos_cat_id - 1
             qry_neg_img_ids = self.dataset.coco.getImgIds(catIds=qry_neg_cat_id)
 
@@ -85,8 +88,11 @@ class ConsecLoader:
                 debug_info['qry_neg_inds'].append(qry_neg_inds)
             else:
                 loader_qry = DataLoader(dataset=Subset(self.dataset, qry_neg_inds), shuffle=False, batch_size=self.qry_size,
-                                        pin_memory=False, drop_last=False, collate_fn=collate_fn)
-                sample_qry = self.dataset.transform.apply(next(iter(loader_qry)))
+                                        pin_memory=True, drop_last=False, collate_fn=self.dataset.collate_fn)
+                if self.dataset.batch_transform:
+                    sample_qry = self.dataset.transform.apply(next(iter(loader_qry)))
+                else:
+                    sample_qry = next(iter(loader_qry))[0]
                 sample = torch.cat([sample, sample_qry], dim=0)
                 label.append(0.)
 
@@ -177,7 +183,7 @@ class TestLoader:
         for catId in self.pos_catIds:
             ids_img_sup = self.dataset.coco.getImgIds(catIds=catId)
             loader = DataLoader(dataset=Subset(self.dataset, ids_img_sup), shuffle=False, batch_size=len(ids_img_sup),
-                                pin_memory=False, drop_last=False, collate_fn=collate_fn)
+                                pin_memory=True, drop_last=False, collate_fn=self.dataset.collate_fn)
             landmark = next(iter(loader))[0]
             landmark = landmark.view([1] + list(landmark.shape))
             landmarks = torch.cat([landmarks, landmark], dim=0) if landmarks is not None else landmark

@@ -36,12 +36,14 @@ def collate_fn(batch):
 
 if __name__ == '__main__':
     # root_imgs = '/Users/shidebo/dataset/AV/Sorted/ASB1F/ccw/210830_181331_mav_320x240ASB1F/000_negative'
-    root_imgs = '/Volumes/dataset/av/dual_fisheye/sorted/Kemper3F/ccw/220311_224215_mav_320x240_Kemper3F_ccw/030-negative'
+    # root_imgs = '/Volumes/dataset/av/dual_fisheye/sorted/ASB1F/cw/220309_151804_mav_320x240_ASB1F_CW/000-negative'
+    root_imgs = '/Users/shidebo/dataset/AV/000-negative/'
 
     trfm = A.Compose([
-        A.Crop(x_min=0, y_min=0, x_max=520, y_max=192, always_apply=True),
+        A.Resize(height=224, width=448),
+        A.CoarseDropout(max_holes=4, min_holes=1, max_height=224, max_width=112, min_height=20, min_width=20),
         A.Rotate(limit=10),
-        A.ColorJitter(),
+        A.ColorJitter(brightness=0.5, hue=0.5, contrast=0.5),
         ToTensorV2(),
     ])
 
