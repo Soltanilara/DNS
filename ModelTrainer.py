@@ -10,16 +10,19 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.nn.functional as F
+from torch.utils.data import DataLoader, Subset
 import csv
+import json
 import time
 from collections import OrderedDict
 from tqdm import tqdm
 
 from models.StampNet import load_model
-from utils.loader import ConsecLoader
-from utils.datasets import get_dataset
-from utils.utils import str2bool
-
+from testing import LoadModel_LandmarkStats, MatchDetector
+from utils.loader import ConsecLoader, TestLoader
+from utils.datasets import get_dataset, get_dataloader_val
+from utils.utils import str2bool, get_imgId2landmarkId, per_landmark, plot_figure
 
 parser = argparse.ArgumentParser(description='Process some integers.')
 parser.add_argument('-n', '--name', type=str, required=True,
@@ -48,6 +51,8 @@ parser.add_argument('-size_qry', '--qry_size', default=10, type=int, required=Fa
                     help='Size of the query set (default: 10)')
 parser.add_argument('-num_qry', '--qry_num', default=6, type=int, required=False,
                     help='Size of the query set (default: 6)')
+parser.add_argument('-debug', '--debug', default=False, type=str2bool, required=False,
+                    help='Debug mode (default: False)')
 
 args = parser.parse_args()
 
@@ -63,6 +68,7 @@ if sys.platform == 'linux':
     dir_dataset = '/home/nick/dataset/dual_fisheye_indoor/PNG'
     dir_coco = '/home/nick/projects/FSL/coco/dual_fisheye/15_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F/PNG'
     dir_output = '/home/nick/projects/FSL/output'
+    dir_ckpt = '/mnt/18ee5ff4-5aaf-495c-b305-9b9698c8d053/Nick/av/ckpt'
 else:
     dir_dataset = '/Users/shidebo/dataset/AV/Sorted/'
 
@@ -76,9 +82,10 @@ batch_fine = args.batch_fine
 sup_size = args.sup_size
 qry_size = args.qry_size
 qry_num = args.qry_num
+debug = args.debug
 channels, im_height, im_width = 3, 224, 224
 lr = 1e-4  # 1e-3
-stats_freq = 1
+stats_freq = 2
 sch_param_1 = 10
 sch_param_2 = 0.5
 FC_len = 1000
@@ -86,8 +93,16 @@ course_name = 'dual_fisheye_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalS
 savename = course_name+'_batch'+str(batch_pre)+'_' + str(sup_size)+'-shot_lr_'+str(lr)+'_lrsch_'+str(sch_param_2)+'_'+str(sch_param_1)+'_'+str(n_episodes)+'episodes'
 print(savename)
 
+dir_ckpt = osp.join(dir_ckpt, savename)
+dir_ckpt_all = osp.join(dir_ckpt, 'ckpt_all')
+for d in [dir_ckpt_all, dir_ckpt_all]:
+    if not osp.exists(d):
+        os.makedirs(d)
+
 dataset_train = get_dataset(dir_dataset, osp.join(dir_coco, 'train.json'), 'train', args)
 dataset_val = get_dataset(dir_dataset, osp.join(dir_coco, 'val.json'), 'val', args)
+
+dataloaders_val = get_dataloader_val(dataset_val)
 
 
 # Train def-------------------------------------------------------------------------
@@ -96,7 +111,7 @@ from tqdm import trange
 
 def ftrain(model, optimizer, dataset_train, dataset_val, sup_size, qry_size, qry_num, max_epoch,
            epoch_size, accuracy_stats, loss_stats, stats_freq, sch_param_1, sch_param_2, batch,
-           acc_first_epoch, loss_first_epoch):
+           acc_first_epoch, loss_first_epoch, mode):
     """
     Trains the StampNet
     Args:
@@ -116,65 +131,130 @@ def ftrain(model, optimizer, dataset_train, dataset_val, sup_size, qry_size, qry
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=sch_param_1, gamma=sch_param_2, last_epoch=-1)
     epoch = 0  # epochs done so far
     stop = False  # status to know when to stop
-    best_acc = 0
+    best_f1 = 0
     model_best_path = ''
+    data_val = []
 
+    model.train()
     while epoch < max_epoch and not stop:
-        model.train()
         bar = tqdm(range(epoch_size), desc="Epoch {:d} train".format(epoch + 1))
         for episode_batch in bar:
+            if debug and episode_batch:
+                break
             loader = ConsecLoader(batch, sup_size, qry_size, qry_num, dataset_train)
             sample = loader.get_batch()
             optimizer.zero_grad()
 
             loss, output = model.set_forward_loss(sample)
             running_loss = float(output['loss'])
-            running_acc = float(output['acc'])
+            running_f1 = float(output['acc'])
             loss.backward()
             optimizer.step()
             loss_stats['train'].append(running_loss)
-            accuracy_stats['train'].append(running_acc)
+            accuracy_stats['train'].append(running_f1)
             bar.set_postfix({
                 'Loss': running_loss,
-                'Acc': running_acc
+                'Acc': running_f1
             })
             if epoch == 0:
-                acc_first_epoch['train'].append(running_acc)
+                acc_first_epoch['train'].append(running_f1)
                 loss_first_epoch['train'].append(running_loss)
                 # if episode_batch < 20:
                 #     print('Epoch 1 batch {:d} -- Loss: {:.4f} Acc: {:.4f}'.format(episode_batch, running_loss,
                 #                                                                   running_acc)) #print first few batch results
         epoch += 1
         if epoch % stats_freq == 0:
-            print('Epoch {:d} -- Loss: {:.4f} Acc: {:.4f}'.format(epoch, running_loss, running_acc))
-        # Validation--------------------------------------
-        with torch.no_grad():
-            running_loss = 0.0
-            running_acc = 0.0
+            print('Epoch {:d} -- Loss: {:.4f} Acc: {:.4f}'.format(epoch, running_loss, running_f1))
+            # Validation--------------------------------------
             model.eval()
-            bar = tqdm(range(epoch_size), desc="Epoch {:d} val".format(epoch))
-            for _ in bar:
-                loader = ConsecLoader(batch, sup_size, qry_size, qry_num, dataset_val)
-                sample = loader.get_batch()
-                loss, output = model.set_forward_loss(sample)
-                running_loss += float(output['loss'])
-                running_acc += float(output['acc'])
-                bar.set_postfix({
-                    'Loss': output['loss'],
-                    'Acc': output['acc']
-                })
-            epoch_loss = running_loss / epoch_size
-            epoch_acc = running_acc / epoch_size
-            loss_stats['val'].append(epoch_loss)
-            accuracy_stats['val'].append(epoch_acc)
-            print('Epoch_val {:d} -- Loss_val: {:.4f} Acc_val: {:.4f}'.format(epoch, epoch_loss, epoch_acc))
-            if epoch_acc >= best_acc:
-                best_acc = epoch_acc
-                if model_best_path:
-                    os.remove(model_best_path)
-                model_best_path = 'ckpt/model_best_' + savename + '.pth'
-                torch.save(model, model_best_path)
-                print('Model saved to: ' + model_best_path)
+            with torch.no_grad():
+                # running_loss = 0.0
+                # running_acc = 0.0
+                # bar = tqdm(range(epoch_size), desc="Epoch {:d} val".format(epoch))
+                # for _ in bar:
+                #     loader = ConsecLoader(batch, sup_size, qry_size, qry_num, dataset_val)
+                #     sample = loader.get_batch()
+                #     loss, output = model.set_forward_loss(sample)
+                #     running_loss += float(output['loss'])
+                #     running_acc += float(output['acc'])
+                #     bar.set_postfix({
+                #         'Loss': output['loss'],
+                #         'Acc': output['acc']
+                #     })
+                running_loss = []
+                running_f1 = []
+                data_val_epoch = {}
+                pbar = tqdm(dataset_val.summary['location2Lap'].keys())
+                for location in pbar:
+                    dataloader_landmark = dataloaders_val[location]['landmark']
+                    dataloader_test = dataloaders_val[location]['test']
+
+                    model, proto_sup, eigs_sup = LoadModel_LandmarkStats(device, dataloader_landmark, model)
+
+                    imgId2landmarkId, landmark_borders, gt = get_imgId2landmarkId(dataset_val, dataloader_test.catIds)
+
+                    qry_imgs = None
+                    frame_prob = []
+                    tp, fn, tn, fp = 0, 0, 0, 0
+                    threshold = 0.4
+                    probabilities = torch.zeros(15, requires_grad=False).cuda(device)
+                    for i, img in enumerate(dataloader_test):
+                        pbar.set_description_str('-- Validation: {} [{}/{}]'.format(location, i, len(dataloader_test)))
+                        if qry_imgs is None:
+                            qry_imgs = img[0]
+                            frame_prob += [0]
+                            # tn += 1
+                        elif qry_imgs.shape[0] < qry_size:
+                            qry_imgs = torch.cat([qry_imgs, img[0]], dim=0)
+                            frame_prob += [0]
+                            # tn += 1
+                        else:
+                            qry_imgs = torch.cat([qry_imgs[1:], img[0]], dim=0)
+                            landmark = imgId2landmarkId[list(imgId2landmarkId.keys())[i]]
+                            lm_proto = proto_sup[landmark, :]
+                            lm_eigs = eigs_sup[landmark, :]
+                            match, probabilities = MatchDetector(
+                                model, qry_imgs, lm_proto, lm_eigs, probabilities, threshold=0.5, device=device)
+                            p = probabilities[-1].cpu().item()
+                            # if gt[i] >= threshold and p >= threshold: tp += 1
+                            # if gt[i] >= threshold and p < threshold: fn += 1
+                            # if gt[i] < threshold and p >= threshold: fp += 1
+                            # if gt[i] < threshold and p < threshold: tn += 1
+                            frame_prob.append(p)
+                    tp, fn, tn, fp = per_landmark(frame_prob, landmark_borders, threshold, tp, fn, tn, fp)
+
+                    loss_val = F.binary_cross_entropy(torch.tensor(frame_prob, dtype=float), torch.tensor(gt, dtype=float))
+                    precision = tp / (tp + fp + 1e-3)
+                    recall = tp / (tp + fn + 1e-3)
+                    f1 = 2*recall*precision/(recall + precision)
+                    running_loss.append(loss_val)
+                    running_f1.append(f1)
+
+                    if debug:
+                        plot_figure(location, frame_prob, landmark_borders, 'frame', 'prob', show=True)
+
+                    pbar.set_postfix({
+                        'Loss': np.mean(running_loss),
+                        'F1': np.mean(running_f1)
+                    })
+                    data_val_epoch[location] = {'tp': tp, 'fn': fn, 'tn': tn, 'fp': fp}
+                    if debug:
+                        break
+                running_loss_mean = np.mean(running_loss)
+                running_f1_mean = np.mean(running_f1)
+                loss_stats['val'].append(running_loss_mean)
+                accuracy_stats['val'].append(running_f1_mean)
+                data_val.append(data_val_epoch)
+                print('Epoch_val {:d} -- Loss_val: {:.4f} Acc_val: {:.4f}'.format(epoch, running_loss_mean, running_f1_mean))
+                if running_f1_mean >= best_f1:
+                    best_f1 = running_f1_mean
+                    if model_best_path:
+                        os.remove(model_best_path)
+                    model_best_path = osp.join(dir_ckpt, 'model_best_' + savename + '.pth')
+                    torch.save(model, model_best_path)
+                    print('Model saved to: ' + model_best_path)
+                path_model = osp.join(dir_ckpt_all, '{}_epoch_{}.pth'.format(savename, epoch))
+                torch.save(model, path_model)
         scheduler.step()
 
         dir_csv = osp.join(dir_output, 'csv')
@@ -183,13 +263,28 @@ def ftrain(model, optimizer, dataset_train, dataset_val, sup_size, qry_size, qry
         w = csv.writer(open(osp.join(dir_csv, "accuracy_stats_"+savename+".csv") , "w")) # updates a record of accuracies
         for key, val in accuracy_stats.items():
             w.writerow([key, val])
-        print("\n", time.time() - ts, "\n")
-    return loss_stats, accuracy_stats, loss_first_epoch, acc_first_epoch
+
+        dir_json = osp.join(dir_output, 'json')
+        if not osp.exists(dir_json):
+            os.makedirs(dir_json)
+        if mode == 'pre':
+            path_json = 'data_val_{}_pre.json'.format(savename)
+        elif mode == 'fine':
+            path_json = 'data_val_{}_fine.json'.format(savename)
+        with open(osp.join(dir_json, path_json), 'w') as f:
+            json.dump(data_val, f)
+
+        print("\nUsed time: ", time.time() - ts, " s\n")
+    return loss_stats, accuracy_stats, data_val, loss_first_epoch, acc_first_epoch
 
 
 # Begin pre-training------------------------------------------------------------------------
 
-model = load_model(FCdim=FC_len, backbone=backbone, device=device)
+if debug:
+    model_path = '/mnt/18ee5ff4-5aaf-495c-b305-9b9698c8d053/Nick/av/ckpt/dual_fisheye_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F_batch_3_neg_50_15locations_pre15_all_batch36_10-shot_lr_0.0001_lrsch_0.5_10_16episodes/ckpt_all/dual_fisheye_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F_batch_3_neg_50_15locations_pre15_all_FineTune_NewMix_SymMah_batch3_10-shot_lr_1e-05_lrsch_0.5_10_100episodes_epoch_6.pth'
+    model = torch.load(model_path, map_location='cpu').cuda(device)
+else:
+    model = load_model(FCdim=FC_len, backbone=backbone, device=device)
 
 # shows the number of trainable parameters----------------------------------------------
 model_parameters = filter(lambda p: p.requires_grad, model.parameters())
@@ -224,7 +319,7 @@ print(time.time() - ts)
 ftrain(model, optimizer, dataset_train, dataset_val,
        sup_size, qry_size, qry_num, n_epochs_pre, n_episodes,
        accuracy_stats, loss_stats, stats_freq,
-       sch_param_1, sch_param_2, batch_pre, acc_first_epoch, loss_first_epoch)
+       sch_param_1, sch_param_2, batch_pre, acc_first_epoch, loss_first_epoch, 'pre')
 time.time() - ts
 
 # torch.save(model, 'model_' + savename + '.pth')
@@ -271,8 +366,8 @@ if n_epochs_pre > 0:
     max_index = acc_list.index(max_value)
     print(max_index+1) #prints the epoch number of pre-trained model with max accuracy
 
-# model = torch.load('ckpt/model_best_' + str(max_index+1) + '_epochs_' + savename + '.pth').cuda(device) #loads the model with highest validation accuracy
-model = torch.load('ckpt/model_best_' + savename + '.pth').cuda(device) #loads the model with highest validation accuracy
+path_model = osp.join(dir_ckpt, 'model_best_' + savename + '.pth')
+model = torch.load(path_model).cuda(device) #loads the model with highest validation accuracy
 
 ## Begin fine-tuning----------------------------------------------------------------------------------------------------------
 
@@ -311,7 +406,7 @@ print(time.time() - ts)
 ftrain(model, optimizer, dataset_train, dataset_val,
        sup_size, qry_size, qry_num, n_epochs_fine, n_episodes,
        accuracy_stats, loss_stats, stats_freq,
-       sch_param_1, sch_param_2, batch_fine, acc_first_epoch, loss_first_epoch)
+       sch_param_1, sch_param_2, batch_fine, acc_first_epoch, loss_first_epoch, 'fine')
 time.time() - ts
 
 # torch.save(model, 'model_' + savename + '.pth')
@@ -353,14 +448,16 @@ fig.savefig(osp.join(dir_output, 'figures', 'Epoch 1 '+str(n_epochs_fine)+' epoc
 acc_list = accuracy_stats['val']
 max_value = max(acc_list)
 max_index = acc_list.index(max_value)
-print('Best epoch: {}'.format(max_index+1)) #prints the epoch number of fine-tuned model with max accuracy
+print('Best epoch: {}'.format((max_index+1)*2)) #prints the epoch number of fine-tuned model with max accuracy
 
 # Load the best-performing model and save with suitable name and format for evaluation----------------------------------
-path_model_best = 'ckpt/model_best_' + savename + '.pth'
-model = torch.load(path_model_best).cuda(device) #loads the fine-tuned model with highest validation accuracy
+model_best_path = osp.join(dir_ckpt, 'model_best_' + savename + '.pth')
+model = torch.load(model_best_path).cuda(device) #loads the fine-tuned model with highest validation accuracy
 encoder = model.encoder
-cov_module = model.cov_module
+cov = model.cov
 classifier = model.classifier
-model = nn.Sequential(OrderedDict([('encoder', encoder), ('cov', cov_module), ('classifier', classifier)]))
-torch.save(model, 'ckpt/ModelMCN_'+course_name+'.pth')
-os.remove(path_model_best)
+model = nn.Sequential(OrderedDict([('encoder', encoder), ('cov', cov), ('classifier', classifier)]))
+path_model = osp.join(dir_ckpt_all, 'ModelMCN_{}.pth'.format(course_name))
+# torch.save(model, 'ckpt/ModelMCN_'+course_name+'.pth')
+torch.save(model, path_model)
+os.remove(model_best_path)

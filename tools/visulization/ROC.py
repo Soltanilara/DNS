@@ -39,7 +39,9 @@ if __name__ == '__main__':
         # 'resnet50_png',
 
         # '15locations',
-        '4locations',
+        # '4locations',
+
+        'epoch_34'
 
     ]
     for model_name in model_names:

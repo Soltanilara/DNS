@@ -13,7 +13,7 @@ from tqdm import tqdm
 import json
 
 from utils.loader import TestLoader
-from utils.utils import get_imgId2landmarkId, gen_6_proto
+from utils.utils import get_imgId2landmarkId, gen_6_proto, plot_figure
 from utils.datasets import AvCocoDetection
 
 
@@ -59,7 +59,7 @@ def LoadModel_LandmarkStats(device, loader, model):
     return model, torch.cat([proto_sup_l, proto_sup_r], dim=2), torch.cat([eigs_sup_l, eigs_sup_r], dim=2)
 
 
-def encode_one_side_match(model, image):
+def encode_one_side_match(model, image, device=0):
     qry_proto = model.encoder(image.cuda(device)).squeeze()
     qry_eigs = model.cov(qry_proto).squeeze() + 1e-8
 
@@ -87,8 +87,8 @@ def MatchDetector(model, image, lm_proto, lm_eigs, probabilities, threshold, dev
     # qry_proto = torch.mean(qry_proto, dim=0)
     # qry_eigs = torch.mean(qry_eigs, dim=0)
 
-    qry_proto_l, qry_eigs_l = encode_one_side_match(model, image[:, :, :, :224])
-    qry_proto_r, qry_eigs_r = encode_one_side_match(model, image[:, :, :, 224:])
+    qry_proto_l, qry_eigs_l = encode_one_side_match(model, image[:, :, :, :224], device)
+    qry_proto_r, qry_eigs_r = encode_one_side_match(model, image[:, :, :, 224:], device)
 
     qry_proto = torch.cat([qry_proto_l, qry_proto_r], dim=0)
     qry_eigs = torch.cat([qry_eigs_l, qry_eigs_r], dim=0)
@@ -105,25 +105,6 @@ def MatchDetector(model, image, lm_proto, lm_eigs, probabilities, threshold, dev
     else:
         match = False
     return match, probabilities
-
-
-def plot_figure(location, prob, borders, xlabel, ylabel, path_save):
-    fig = plt.figure(figsize=(16, 8))
-    ax = fig.add_subplot(111)
-    # ax = fig_frame.add_subplot(len(locations), 2, fig_ind)
-    # fig_ind += 1
-    ax.set_xlabel(xlabel, fontsize=20)
-    ax.set_ylabel(ylabel, fontsize=20)
-    ax.plot(prob)
-    ax.grid()
-    plt.title(location)
-    plt.vlines(borders['start'], 0, 1, 'g', 'dashed')
-    plt.vlines(borders['end'], 0, 1, 'r', 'dashed')
-    plt.ylim(0, 1)
-    plt.xlim(0, i)
-    # plt.show
-    plt.savefig(osp.join(path_save), dpi=300)
-    plt.close()
 
 
 if __name__ == '__main__':
@@ -145,7 +126,10 @@ if __name__ == '__main__':
     root_dataset = '/home/nick/dataset/dual_fisheye_indoor/PNG'
     dir_coco = 'coco/dual_fisheye/cross_test/3'
     # model_path = 'ckpt/ModelMCN_dual_fisheye_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F_batch_3_neg_50_15locations.pth'
-    model_path = 'ckpt/ModelMCN_dual_fisheye_exclude_Ghausi2F_Lounge_Kemper3F_batch_3_neg_50_resnet50_png.pth'
+    # model_path = '/mnt/16T/Nick/av/ckpt/dual_fisheye_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F_batch_3_neg_50_15locations_pre15_all_batch36_10-shot_lr_0.0001_lrsch_0.5_10_16episodes/model_best_dual_fisheye_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F_batch_3_neg_50_15locations_pre15_all_FineTune_NewMix_SymMah_batch3_10-shot_lr_1e-05_lrsch_0.5_10_100episodes.pth'
+    # model_path = '/mnt/16T/Nick/av/ckpt/dual_fisheye_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F_batch_3_neg_50_15locations_pre15_all_batch36_10-shot_lr_0.0001_lrsch_0.5_10_16episodes/ckpt_all/dual_fisheye_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F_batch_3_neg_50_15locations_pre15_all_FineTune_NewMix_SymMah_batch3_10-shot_lr_1e-05_lrsch_0.5_10_100episodes_epoch_6.pth'
+    model_path = '/mnt/18ee5ff4-5aaf-495c-b305-9b9698c8d053/Nick/av/ckpt/dual_fisheye_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F_batch_3_neg_50_15locations_pre15_val_per_landmark_batch36_10-shot_lr_0.0001_lrsch_0.5_10_16episodes/model_best_dual_fisheye_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F_batch_3_neg_50_15locations_pre15_val_per_landmark_FineTune_NewMix_SymMah_batch3_10-shot_lr_1e-05_lrsch_0.5_10_100episodes.pth'
+
     if not osp.exists(model_path):
         print('Waiting for model {}'.format(model_path))
     while not osp.exists(model_path):
@@ -163,7 +147,7 @@ if __name__ == '__main__':
 
     device = args.device
     channels, im_height, im_width = 3, 224, 448
-    threshold = 0.5
+    threshold = 0.4
     qry_size = args.size
 
     transform = A.Compose([
@@ -212,7 +196,6 @@ if __name__ == '__main__':
                     transform=transform
                 )
 
-                dataloader_test = TestLoader(dataset_test)
                 dataloader_landmark = TestLoader(dataset_landmark)
 
                 model, proto_sup, eigs_sup = LoadModel_LandmarkStats(device, dataloader_landmark, model)

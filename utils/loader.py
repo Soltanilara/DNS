@@ -174,9 +174,13 @@ class RandNegLoader(ConsecLoader):
 
 
 class TestLoader:
-    def __init__(self, dataset):
+    def __init__(self, dataset, landmark_laps=None):
         self.dataset = dataset
         self.pos_catIds = dataset.summary['PN2CatId']['positive']
+        if landmark_laps:
+            landmark_catIds = dataset.summary['lap2CatId'][landmark_laps['cw']] + \
+                              dataset.summary['lap2CatId'][landmark_laps['ccw']]
+            self.pos_catIds = [i for i in landmark_catIds if i in self.pos_catIds]
 
     def get_all_landmarks(self):
         landmarks = None

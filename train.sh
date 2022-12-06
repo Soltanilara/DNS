@@ -48,4 +48,7 @@
 #python ModelTrainer.py -n 4locations      -device 0 -b resnet50   -aug_r 1 -aug_j 1 -aug_d 1 -epoch_pre 3 -epoch_fine 60 -batch_pre 36 -batch_fine 3 -size_sup 10 -size_qry 10 -num_qry 6
 
 #python ModelTrainer.py -n 15locations      -device 0 -b resnet50   -aug_r 1 -aug_j 1 -aug_d 1 -epoch_pre 3 -epoch_fine 40 -batch_pre 36 -batch_fine 3 -size_sup 10 -size_qry 10 -num_qry 6
-python ModelTrainer.py -n 15locations_pre15      -device 0 -b resnet50   -aug_r 1 -aug_j 1 -aug_d 1 -epoch_pre 15 -epoch_fine 40 -batch_pre 36 -batch_fine 3 -size_sup 10 -size_qry 10 -num_qry 6
+#python ModelTrainer.py -n 15locations_pre15_all      -device 0 -b resnet50   -aug_r 1 -aug_j 1 -aug_d 1 -epoch_pre 15 -epoch_fine 40 -batch_pre 36 -batch_fine 3 -size_sup 10 -size_qry 10 -num_qry 6
+#python ModelTrainer.py -n 15locations_pre15_val_per_landmark      -device 0 -b resnet50   -aug_r 1 -aug_j 1 -aug_d 1 -epoch_pre 15 -epoch_fine 40 -batch_pre 36 -batch_fine 3 -size_sup 10 -size_qry 10 -num_qry 6
+
+python ModelTrainer.py -n 15locations_pre15_val_per_landmark_f1      -device 0 -b resnet50   -aug_r 1 -aug_j 1 -aug_d 1 -epoch_pre 15 -epoch_fine 40 -batch_pre 36 -batch_fine 3 -size_sup 10 -size_qry 10 -num_qry 6

@@ -26,7 +26,7 @@ def load_model(**kwargs):
         param.requires_grad = False  #freezes the pretrained model parameters
     encoder.fc = nn.Linear(2048, FCdim)  #todo: try different FCdim
 
-    cov_module = nn.Sequential(
+    cov = nn.Sequential(
         nn.Linear(FCdim, FCdim),
         nn.Tanh(),
         nn.Linear(FCdim, FCdim),
@@ -44,7 +44,7 @@ def load_model(**kwargs):
         nn.Sigmoid()
     )
 
-    return StampNet(encoder, cov_module, classifier, device)
+    return StampNet(encoder, cov, classifier, device)
 
 
 class StampNet(nn.Module):
@@ -54,11 +54,11 @@ class StampNet(nn.Module):
         self.device = device
         if self.device == 'cpu':
             self.encoder = encoder
-            self.cov_module = cov_module
+            self.cov = cov_module
             self.classifier = classifier
         else:
             self.encoder = encoder.cuda(self.device)
-            self.cov_module = cov_module.cuda(self.device)
+            self.cov = cov_module.cuda(self.device)
             self.classifier = classifier.cuda(self.device)
 
     def forward_one_side(self, x_support, x_query, batch, sup_num, sup_size, qry_num, qry_size):
@@ -67,7 +67,7 @@ class StampNet(nn.Module):
                        x_query.contiguous().view(batch * qry_num * qry_size, *x_query.size()[-3:])], 0)
         z = self.encoder.forward(x)
         indiv_protos = z
-        indiv_eigs = self.cov_module.forward(z) + 1e-8
+        indiv_eigs = self.cov.forward(z) + 1e-8
 
         proto_indiv_sup = indiv_protos[:batch * sup_size].view(batch, sup_num, sup_size, -1)
         proto_qry = indiv_protos[batch * sup_size:].view(batch, qry_num, qry_size, -1)

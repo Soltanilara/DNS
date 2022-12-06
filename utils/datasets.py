@@ -2,8 +2,10 @@ from typing import Any, Tuple
 
 import numpy as np
 from torchvision.datasets import CocoDetection
+from torch.utils.data import DataLoader, Subset
 
 from utils.transform import BatchTransform, get_trfm
+from utils.loader import TestLoader
 
 
 class AvCocoDetection(CocoDetection):
@@ -98,3 +100,27 @@ def get_dataset(root, annFile, type, args, batch_transform=False):
     print('\n')
 
     return dataset
+
+
+def get_dataloader_val(dataset: AvCocoDetection):
+    loaders = {}
+    for location, laps in dataset.summary['location2Lap'].items():
+        laps_landmark, laps_test = {}, {}
+        directions = ['cw', 'ccw']
+        for direction in directions:
+            laps_landmark[direction] = laps[direction][0]
+            laps_test[direction] = laps[direction][1]
+
+        test_catIds = dataset.summary['lap2CatId'][laps_test['cw']] + \
+                      dataset.summary['lap2CatId'][laps_test['ccw']]
+        inds_test = []
+        for catId in test_catIds:
+            inds_test += dataset.coco.catToImgs[catId]
+        dataset_test = Subset(dataset, inds_test)
+
+        loaders[location] = {}
+        loaders[location]['test'] = DataLoader(
+            dataset=dataset_test, shuffle=False, batch_size=1, pin_memory=False, drop_last=False)
+        loaders[location]['test'].catIds = test_catIds
+        loaders[location]['landmark'] = TestLoader(dataset, laps_landmark)
+    return loaders

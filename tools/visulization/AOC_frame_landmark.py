@@ -5,7 +5,8 @@ import matplotlib.pyplot as plt
 import json
 
 
-dir_log = '/home/nick/projects/FSL/temp/ROC'
+# dir_log = '/home/nick/projects/FSL/temp/ROC'
+dir_log = '/Users/shidebo/SynologyDrive/Projects/AV/code/temp/ROC'
 
 dict_model_name_diaplay_name = {}
 model_names = [
@@ -34,9 +35,9 @@ model_names = [
     # 'efficientnet-b1_new',
     # 'efficientnet-b4_size_10',
     # 'j',
-    # 'resnet50_png'
-    '15locations',
-    '4locations'
+    'resnet50_png'
+    # '15locations',
+    # '4locations'
 ]
 type = 'Per Landmark'
 # type = 'Per Frame'
