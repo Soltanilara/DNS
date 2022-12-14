@@ -24,15 +24,19 @@ def encode_one_side_landmark(model, landmarks, num_landmarks):
     for i in range(16):
         landmarks_i = landmarks[i*60: (i+1)*60, :, :, :]
         indiv_protos_i = model.encoder(landmarks_i)
-        indiv_eigs_i = model.cov(indiv_protos_i) + 1e-8
         indiv_protos = torch.cat([indiv_protos, indiv_protos_i], dim=0) if indiv_protos is not None else indiv_protos_i
-        indiv_eigs = torch.cat([indiv_eigs, indiv_eigs_i], dim=0) if indiv_eigs is not None else indiv_eigs_i
+        if model.cov:
+            indiv_eigs_i = model.cov(indiv_protos_i) + 1e-8
+            indiv_eigs = torch.cat([indiv_eigs, indiv_eigs_i], dim=0) if indiv_eigs is not None else indiv_eigs_i
 
     indiv_protos = indiv_protos.view([num_landmarks, 6, 10] + [indiv_protos.shape[-1]])
-    indiv_eigs = indiv_eigs.view([num_landmarks, 6, 10] + [indiv_eigs.shape[-1]])
-
     proto_sup = torch.mean(indiv_protos, dim=2).squeeze()
-    eigs_sup = torch.mean(indiv_eigs, dim=2).squeeze()
+
+    if model.cov:
+        indiv_eigs = indiv_eigs.view([num_landmarks, 6, 10] + [indiv_eigs.shape[-1]])
+        eigs_sup = torch.mean(indiv_eigs, dim=2).squeeze()
+    else:
+        eigs_sup = None
 
     return proto_sup, eigs_sup
 
@@ -55,17 +59,19 @@ def LoadModel_LandmarkStats(device, loader, model):
 
     proto_sup_l, eigs_sup_l = encode_one_side_landmark(model, landmarks[:, :, :, :224], num_landmarks)
     proto_sup_r, eigs_sup_r = encode_one_side_landmark(model, landmarks[:, :, :, 224:], num_landmarks)
-
-    return model, torch.cat([proto_sup_l, proto_sup_r], dim=2), torch.cat([eigs_sup_l, eigs_sup_r], dim=2)
+    if model.cov:
+        return model, torch.cat([proto_sup_l, proto_sup_r], dim=2), torch.cat([eigs_sup_l, eigs_sup_r], dim=2)
+    else:
+        return model, torch.cat([proto_sup_l, proto_sup_r], dim=2), None
 
 
 def encode_one_side_match(model, image, device=0):
     qry_proto = model.encoder(image.cuda(device)).squeeze()
-    qry_eigs = model.cov(qry_proto).squeeze() + 1e-8
+    qry_eigs = model.cov(qry_proto).squeeze() + 1e-8 if model.cov else None
 
     if len(qry_proto.shape) == 2:
         qry_proto = torch.mean(qry_proto, dim=0)
-        qry_eigs = torch.mean(qry_eigs, dim=0)
+        qry_eigs = torch.mean(qry_eigs, dim=0) if model.cov else None
 
     return qry_proto, qry_eigs
 
@@ -91,10 +97,14 @@ def MatchDetector(model, image, lm_proto, lm_eigs, probabilities, threshold, dev
     qry_proto_r, qry_eigs_r = encode_one_side_match(model, image[:, :, :, 224:], device)
 
     qry_proto = torch.cat([qry_proto_l, qry_proto_r], dim=0)
-    qry_eigs = torch.cat([qry_eigs_l, qry_eigs_r], dim=0)
 
     diff = lm_proto - qry_proto
-    dist = diff / (qry_eigs + lm_eigs) * diff
+
+    if model.cov:
+        qry_eigs = torch.cat([qry_eigs_l, qry_eigs_r], dim=0)
+        dist = diff / (qry_eigs + lm_eigs) * diff
+    else:
+        dist = diff ** 2
 
     prob = model.classifier(dist)
     prob = torch.max(prob).unsqueeze(dim=0)
@@ -115,8 +125,11 @@ if __name__ == '__main__':
                         help='device ID')
     parser.add_argument('-s', '--size', type=int, required=False, default=10,
                         help='size of the support and query set')
+    parser.add_argument('-p', '--path_model', type=str, required=True,
+                        help='path to the model')
     args = parser.parse_args()
     model_name = args.name
+    model_path = args.path_model
 
     ts = time()
 
@@ -125,10 +138,7 @@ if __name__ == '__main__':
 
     root_dataset = '/home/nick/dataset/dual_fisheye_indoor/PNG'
     dir_coco = 'coco/dual_fisheye/cross_test/3'
-    # model_path = 'ckpt/ModelMCN_dual_fisheye_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F_batch_3_neg_50_15locations.pth'
-    # model_path = '/mnt/16T/Nick/av/ckpt/dual_fisheye_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F_batch_3_neg_50_15locations_pre15_all_batch36_10-shot_lr_0.0001_lrsch_0.5_10_16episodes/model_best_dual_fisheye_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F_batch_3_neg_50_15locations_pre15_all_FineTune_NewMix_SymMah_batch3_10-shot_lr_1e-05_lrsch_0.5_10_100episodes.pth'
-    # model_path = '/mnt/16T/Nick/av/ckpt/dual_fisheye_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F_batch_3_neg_50_15locations_pre15_all_batch36_10-shot_lr_0.0001_lrsch_0.5_10_16episodes/ckpt_all/dual_fisheye_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F_batch_3_neg_50_15locations_pre15_all_FineTune_NewMix_SymMah_batch3_10-shot_lr_1e-05_lrsch_0.5_10_100episodes_epoch_6.pth'
-    model_path = '/mnt/18ee5ff4-5aaf-495c-b305-9b9698c8d053/Nick/av/ckpt/dual_fisheye_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F_batch_3_neg_50_15locations_pre15_val_per_landmark_batch36_10-shot_lr_0.0001_lrsch_0.5_10_16episodes/model_best_dual_fisheye_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F_batch_3_neg_50_15locations_pre15_val_per_landmark_FineTune_NewMix_SymMah_batch3_10-shot_lr_1e-05_lrsch_0.5_10_100episodes.pth'
+
 
     if not osp.exists(model_path):
         print('Waiting for model {}'.format(model_path))
@@ -147,7 +157,7 @@ if __name__ == '__main__':
 
     device = args.device
     channels, im_height, im_width = 3, 224, 448
-    threshold = 0.4
+    threshold = 0.5
     qry_size = args.size
 
     transform = A.Compose([
@@ -226,7 +236,7 @@ if __name__ == '__main__':
                         qry_imgs = torch.cat([qry_imgs[1:], img[0]], dim=0)
                         landmark = imgId2landmarkId[i]
                         lm_proto = proto_sup[landmark, :]
-                        lm_eigs = eigs_sup[landmark, :]
+                        lm_eigs = eigs_sup[landmark, :] if model.cov else None
                         match, probabilities = MatchDetector(
                             model, qry_imgs, lm_proto, lm_eigs, probabilities, threshold, device)
                         frame_prob += [probabilities[-1].cpu().item()]

@@ -13,7 +13,9 @@ def load_model(**kwargs):
     FCdim = kwargs['FCdim']
     backbone = kwargs['backbone']
     device = kwargs['device']
+    skip_cov = kwargs['skip_cov']
 
+    print('Using backbone: {}'.format(backbone))
     if backbone == 'resnet50_swav':
         encoder = torch.hub.load('facebookresearch/swav:main', 'resnet50')  # unsupervised trained
     elif backbone == 'resnet50':
@@ -21,17 +23,24 @@ def load_model(**kwargs):
     elif 'efficientnet' in backbone:
         from efficientnet_pytorch import EfficientNet
         encoder = EfficientNet.from_pretrained(backbone)
+    elif backbone == 'scratch':
+        print('Training ResNet50 from scratch')
+        encoder = models.resnet50(pretrained=False)
 
     for param in encoder.parameters():
         param.requires_grad = False  #freezes the pretrained model parameters
     encoder.fc = nn.Linear(2048, FCdim)  #todo: try different FCdim
 
-    cov = nn.Sequential(
-        nn.Linear(FCdim, FCdim),
-        nn.Tanh(),
-        nn.Linear(FCdim, FCdim),
-        nn.Softplus()
-    )
+    if skip_cov:
+        print('Skipping cov module')
+        cov = None
+    else:
+        cov = nn.Sequential(
+            nn.Linear(FCdim, FCdim),
+            nn.Tanh(),
+            nn.Linear(FCdim, FCdim),
+            nn.Softplus()
+        )
 
     classifier = nn.Sequential(
         nn.Linear(FCdim*2, FCdim*2),
@@ -58,7 +67,7 @@ class StampNet(nn.Module):
             self.classifier = classifier
         else:
             self.encoder = encoder.cuda(self.device)
-            self.cov = cov_module.cuda(self.device)
+            self.cov = cov_module.cuda(self.device) if cov_module else None
             self.classifier = classifier.cuda(self.device)
 
     def forward_one_side(self, x_support, x_query, batch, sup_num, sup_size, qry_num, qry_size):
@@ -67,22 +76,24 @@ class StampNet(nn.Module):
                        x_query.contiguous().view(batch * qry_num * qry_size, *x_query.size()[-3:])], 0)
         z = self.encoder.forward(x)
         indiv_protos = z
-        indiv_eigs = self.cov.forward(z) + 1e-8
 
         proto_indiv_sup = indiv_protos[:batch * sup_size].view(batch, sup_num, sup_size, -1)
-        proto_qry = indiv_protos[batch * sup_size:].view(batch, qry_num, qry_size, -1)
-        eigs_indiv_sup = indiv_eigs[:batch * sup_size].view(batch, sup_num, sup_size, -1)
-        eigs_qry = indiv_eigs[batch * sup_size:].view(batch, qry_num, qry_size, -1)
         proto_sup = torch.mean(proto_indiv_sup, 2)
-        eigs_sup = torch.mean(eigs_indiv_sup, 2)
-        proto_qry = torch.mean(proto_qry, 2)
-        eigs_qry = torch.mean(eigs_qry, 2)
-
         proto_sup = proto_sup.view(batch, 1, -1).expand(-1, qry_num, -1)
-        eigs_sup = eigs_sup.view(batch, 1, -1).expand(-1, qry_num, -1)
-
+        proto_qry = indiv_protos[batch * sup_size:].view(batch, qry_num, qry_size, -1)
+        proto_qry = torch.mean(proto_qry, 2)
         diff = proto_sup - proto_qry
-        dists = (diff / (eigs_sup + eigs_qry)).view(batch * qry_num, -1) * diff.view(batch * qry_num, -1)
+
+        if self.cov:
+            indiv_eigs = self.cov.forward(z) + 1e-8
+            eigs_indiv_sup = indiv_eigs[:batch * sup_size].view(batch, sup_num, sup_size, -1)
+            eigs_qry = indiv_eigs[batch * sup_size:].view(batch, qry_num, qry_size, -1)
+            eigs_sup = torch.mean(eigs_indiv_sup, 2)
+            eigs_qry = torch.mean(eigs_qry, 2)
+            eigs_sup = eigs_sup.view(batch, 1, -1).expand(-1, qry_num, -1)
+            dists = (diff/(eigs_sup+eigs_qry)).view(batch*qry_num, -1) * diff.view(batch*qry_num, -1)
+        else:
+            dists = (diff**2).view(batch*qry_num, -1)
 
         return dists
 

@@ -51,6 +51,8 @@ parser.add_argument('-size_qry', '--qry_size', default=10, type=int, required=Fa
                     help='Size of the query set (default: 10)')
 parser.add_argument('-num_qry', '--qry_num', default=6, type=int, required=False,
                     help='Size of the query set (default: 6)')
+parser.add_argument('-skip_cov', '--skip_cov', default=False, type=str2bool, required=False,
+                    help='Whether or not to skip the cov module (default: False)')
 parser.add_argument('-debug', '--debug', default=False, type=str2bool, required=False,
                     help='Debug mode (default: False)')
 
@@ -82,6 +84,7 @@ batch_fine = args.batch_fine
 sup_size = args.sup_size
 qry_size = args.qry_size
 qry_num = args.qry_num
+skip_cov = args.skip_cov
 debug = args.debug
 channels, im_height, im_width = 3, 224, 224
 lr = 1e-4  # 1e-3
@@ -168,19 +171,6 @@ def ftrain(model, optimizer, dataset_train, dataset_val, sup_size, qry_size, qry
             # Validation--------------------------------------
             model.eval()
             with torch.no_grad():
-                # running_loss = 0.0
-                # running_acc = 0.0
-                # bar = tqdm(range(epoch_size), desc="Epoch {:d} val".format(epoch))
-                # for _ in bar:
-                #     loader = ConsecLoader(batch, sup_size, qry_size, qry_num, dataset_val)
-                #     sample = loader.get_batch()
-                #     loss, output = model.set_forward_loss(sample)
-                #     running_loss += float(output['loss'])
-                #     running_acc += float(output['acc'])
-                #     bar.set_postfix({
-                #         'Loss': output['loss'],
-                #         'Acc': output['acc']
-                #     })
                 running_loss = []
                 running_f1 = []
                 data_val_epoch = {}
@@ -212,7 +202,7 @@ def ftrain(model, optimizer, dataset_train, dataset_val, sup_size, qry_size, qry
                             qry_imgs = torch.cat([qry_imgs[1:], img[0]], dim=0)
                             landmark = imgId2landmarkId[list(imgId2landmarkId.keys())[i]]
                             lm_proto = proto_sup[landmark, :]
-                            lm_eigs = eigs_sup[landmark, :]
+                            lm_eigs = eigs_sup[landmark, :] if eigs_sup is not None else None
                             match, probabilities = MatchDetector(
                                 model, qry_imgs, lm_proto, lm_eigs, probabilities, threshold=0.5, device=device)
                             p = probabilities[-1].cpu().item()
@@ -284,7 +274,7 @@ if debug:
     model_path = '/mnt/18ee5ff4-5aaf-495c-b305-9b9698c8d053/Nick/av/ckpt/dual_fisheye_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F_batch_3_neg_50_15locations_pre15_all_batch36_10-shot_lr_0.0001_lrsch_0.5_10_16episodes/ckpt_all/dual_fisheye_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F_batch_3_neg_50_15locations_pre15_all_FineTune_NewMix_SymMah_batch3_10-shot_lr_1e-05_lrsch_0.5_10_100episodes_epoch_6.pth'
     model = torch.load(model_path, map_location='cpu').cuda(device)
 else:
-    model = load_model(FCdim=FC_len, backbone=backbone, device=device)
+    model = load_model(FCdim=FC_len, backbone=backbone, device=device, skip_cov=skip_cov)
 
 # shows the number of trainable parameters----------------------------------------------
 model_parameters = filter(lambda p: p.requires_grad, model.parameters())
@@ -366,8 +356,9 @@ if n_epochs_pre > 0:
     max_index = acc_list.index(max_value)
     print(max_index+1) #prints the epoch number of pre-trained model with max accuracy
 
-path_model = osp.join(dir_ckpt, 'model_best_' + savename + '.pth')
-model = torch.load(path_model).cuda(device) #loads the model with highest validation accuracy
+if n_epochs_pre > 0:
+    path_model = osp.join(dir_ckpt, 'model_best_' + savename + '.pth')
+    model = torch.load(path_model).cuda(device) #loads the model with highest validation accuracy
 
 ## Begin fine-tuning----------------------------------------------------------------------------------------------------------
 
