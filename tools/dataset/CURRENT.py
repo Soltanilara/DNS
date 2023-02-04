@@ -2,11 +2,13 @@ import numpy as np
 import math
 import h5py
 from PIL import Image, ImageOps
-import os.path, shutil
+import os.path
+import shutil
 from os import listdir
 from os.path import isfile, join
 import plotly.express as px
 import sys
+from glob import glob
 
 
 def traverse_datasets(hdf_file):
@@ -44,16 +46,43 @@ def percentage_diff(num1, num2):
 
 
 again = 1
+all_default = True
 DEBUG = False
+
+error_laps = []
 
 while again == 1:
     if DEBUG:
-        datasetarray = ['/Users/shidebo/Downloads/220720_232008_mav_320x240_WestVillage_CW.hdf5']
+        datasetarray = [
+            '/mnt/18ee5ff4-5aaf-495c-b305-9b9698c8d053/Nick/dataset/av/dual_cam/hdf5/new/WestVillageStudyRoom/221004_131052_mav_320x240_CCW.hdf5',
+            '/mnt/18ee5ff4-5aaf-495c-b305-9b9698c8d053/Nick/dataset/av/dual_cam/hdf5/new/Environmental Science 3F/220929_201357_mav_320x240CCW.hdf5',
+            '/mnt/18ee5ff4-5aaf-495c-b305-9b9698c8d053/Nick/dataset/av/dual_cam/hdf5/new/Walker/220719_160738_mav_320x240cw.hdf5',
+            '/mnt/18ee5ff4-5aaf-495c-b305-9b9698c8d053/Nick/dataset/av/dual_cam/hdf5/new/Walker/220719_162543_mav_320x240CCW.hdf5',
+            '/mnt/18ee5ff4-5aaf-495c-b305-9b9698c8d053/Nick/dataset/av/dual_cam/hdf5/new/Walker/220719_162811_mav_320x240CCW.hdf5',
+            '/mnt/18ee5ff4-5aaf-495c-b305-9b9698c8d053/Nick/dataset/av/dual_cam/hdf5/new/PhysicsBuilding/220727_171638_mav_320x240ccw.hdf5',
+            '/mnt/18ee5ff4-5aaf-495c-b305-9b9698c8d053/Nick/dataset/av/dual_cam/hdf5/new/PhysicsBuilding/220727_171945_mav_320x240ccw.hdf5',
+            '/mnt/18ee5ff4-5aaf-495c-b305-9b9698c8d053/Nick/dataset/av/dual_cam/hdf5/new/PhysicsBuilding/220727_172106_mav_320x240ccw.hdf5',
+            '/mnt/18ee5ff4-5aaf-495c-b305-9b9698c8d053/Nick/dataset/av/dual_cam/hdf5/new/PhysicsBuilding/220722_154948_mav_320x240cw.hdf5',
+            '/mnt/18ee5ff4-5aaf-495c-b305-9b9698c8d053/Nick/dataset/av/dual_cam/hdf5/new/WestVillageOffice/221004_130343_mav_320x240_CCW.hdf5',
+            '/mnt/18ee5ff4-5aaf-495c-b305-9b9698c8d053/Nick/dataset/av/dual_cam/hdf5/new/WestVillageOffice/221004_130245_mav_320x240_CCW.hdf5',
+            '/mnt/18ee5ff4-5aaf-495c-b305-9b9698c8d053/Nick/dataset/av/dual_cam/hdf5/new/PhysicsBuilding2F/220805_163108_mav_320x240CCW.hdf5',
+            '/mnt/18ee5ff4-5aaf-495c-b305-9b9698c8d053/Nick/dataset/av/dual_cam/hdf5/new/PhysicsBuilding2F/220805_162733_mav_320x240CW.hdf5',
+            '/mnt/18ee5ff4-5aaf-495c-b305-9b9698c8d053/Nick/dataset/av/dual_cam/hdf5/new/Evironmental Sciences 2F/220927_192159_mav_320x240CW.hdf5',
+            '/mnt/18ee5ff4-5aaf-495c-b305-9b9698c8d053/Nick/dataset/av/dual_cam/hdf5/new/WestVillageMailbox/221004_132332_mav_320x240_CW.hdf5',
+            '/mnt/18ee5ff4-5aaf-495c-b305-9b9698c8d053/Nick/dataset/av/dual_cam/hdf5/new/PhysicsBuildingGF/220826_162014_mav_320x240CW.hdf5',
+            '/mnt/18ee5ff4-5aaf-495c-b305-9b9698c8d053/Nick/dataset/av/dual_cam/hdf5/new/PhysicsBuildingGF/220826_162316_mav_320x240CW.hdf5',
+            '/mnt/18ee5ff4-5aaf-495c-b305-9b9698c8d053/Nick/dataset/av/dual_cam/hdf5/new/EngineeringLibrary/220810_161320_mav_320x240cw.hdf5',
+            '/mnt/18ee5ff4-5aaf-495c-b305-9b9698c8d053/Nick/dataset/av/dual_cam/hdf5/new/EngineeringLibrary/220810_162224_mav_320x240ccw.hdf5',
+            '/mnt/18ee5ff4-5aaf-495c-b305-9b9698c8d053/Nick/dataset/av/dual_cam/hdf5/new/EngineeringLibrary/220810_161006_mav_320x240cw.hdf5',
+        ]
         folderorfile = 'file'
     else:
         datasetarray = []
-        folderorfile = input("Do you want to run a folder or just one file (folder/file)\n")
-        if folderorfile == "folder":
+        folderorfile = input("Do you want to run folders, a folder or just one file (folders/folder/file)\n")
+        if folderorfile == "folders":
+            path = input("Folder name?\n")
+            datasetarray = glob(join(path, '*', '*.hdf5'))
+        elif folderorfile == "folder":
             path = input("Folder name?\n")
             for file in os.listdir(path):
                 if file.endswith(".hdf5"):
@@ -165,7 +194,7 @@ while again == 1:
                     iii.append(ii[n])
             iii.pop()
 
-            if folderorfile == "folder":
+            if folderorfile == "folder" or all_default:
                 c = 15
             else:
                 c = input("How many images previous to the landmark?\n")
@@ -179,7 +208,7 @@ while again == 1:
                 ## ------------------------------------ DEFAULTS ----------------------------------
             falsepos = False
             zz = []
-            if folderorfile == "folder":
+            if folderorfile == "folder" or all_default:
                 defaults = 'y'
             else:
                 defaults = input("all defaults? (y/n)\n")
@@ -189,7 +218,7 @@ while again == 1:
                 floor = 100 * math.floor(h[0] / 100)
                 ceil = 100 * math.ceil(h[0] / 100)
                 tooclose = 10
-                numimgs = 150
+                numimgs = 'n'  # 150
             else:
                 window = input(
                     "How many frames around landmarks should the window be (d for default)(odd number)\n")
@@ -363,7 +392,7 @@ while again == 1:
 
             # print(iii)
             change = 0
-            while (change != 'no' and folderorfile == "file"):
+            while (change != 'no' and (folderorfile == "file" or DEBUG)):
                 change = input("Do you want to change/delete landmarks or add landmarks? (cd/a/no/new)\n")
                 if change == 'no':
                     break
@@ -450,7 +479,7 @@ while again == 1:
                             difference = h[turndir1] - h[turndir2]
                             if difference < 0:
                                 negpos = "left"
-                            elif difference > 0:
+                            elif difference >= 0:
                                 negpos = "right"
                         else:
                             negpos = "straight"
@@ -486,10 +515,11 @@ while again == 1:
                 for folders in os.listdir(file[:-5]):
                     if len(folders) > 8 and folders[-8:] == 'negative':
                         filepathdel = []
-                        if len(os.listdir(file[:-5] + "/" + folders)) > numimgs:
+                        imgs_under_folder = sorted(os.listdir(join(file[:-5], folders)))
+                        if len(imgs_under_folder) > numimgs:
                             x = len(os.listdir(file[:-5] + "/" + folders)) - numimgs
                             for deleting in range(0, x):
-                                imgname = os.listdir(file[:-5] + "/" + folders)[deleting]
+                                imgname = imgs_under_folder[deleting]
                                 filepath = file[:-5] + "/" + folders + "/" + imgname
                                 filepathdel.append(filepath)
                             for delete in filepathdel:
@@ -497,6 +527,9 @@ while again == 1:
 
             ## ----------------------------------- USED TO ANALYZE LANDMARKS LATER -----------------------------
             print(iii)
+            if len(iii) != 8:
+                print('----------------- This lap needs to be reviewed -----------------')
+                error_laps.append(file)
 
             if (os.path.isdir(file[:-5] + "/Analysis") == False):
                 os.mkdir(file[:-5] + "/Analysis")
@@ -516,14 +549,16 @@ while again == 1:
             finalfigure.write_html(file[:-5] + '/plot.html')
             finalfigure.write_json(file[:-5] + '/plot.json')
 
-            if folderorfile == "folder":
+            if folderorfile in ["folder", "folders"]:
                 if file == datasetarray[-1]:
                     again = 0
                     print("finished!")
                     break
-            else:
+            elif not DEBUG:
                 if sys.platform != 'linux':
                     finalfigure.show()
                 asdj = input("Run another dataset? (y/n)\n")
                 if asdj == 'n':
                     again = 0
+for i in error_laps:
+    print(i)

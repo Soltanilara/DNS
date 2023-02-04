@@ -52,6 +52,17 @@ def load_model(**kwargs):
         nn.Linear(10, 1),
         nn.Sigmoid()
     )
+    # classifier = nn.Sequential(  # todo: 3 layers
+    #     nn.Linear(2, 50),
+    #     todo: batch norm
+    #     nn.ELU(),
+    #     nn.Linear(50, 20),
+    #     todo: batch norm
+    #     nn.ELU(),
+    #     nn.Linear(20, 1),
+    #     todo: batch norm
+    #     nn.Sigmoid()
+    # )
 
     return StampNet(encoder, cov, classifier, device)
 
@@ -91,7 +102,7 @@ class StampNet(nn.Module):
             eigs_sup = torch.mean(eigs_indiv_sup, 2)
             eigs_qry = torch.mean(eigs_qry, 2)
             eigs_sup = eigs_sup.view(batch, 1, -1).expand(-1, qry_num, -1)
-            dists = (diff/(eigs_sup+eigs_qry)).view(batch*qry_num, -1) * diff.view(batch*qry_num, -1)
+            dists = (diff/(eigs_sup+eigs_qry)).view(batch*qry_num, -1) * diff.view(batch*qry_num, -1)  # todo: norm?
         else:
             dists = (diff**2).view(batch*qry_num, -1)
 

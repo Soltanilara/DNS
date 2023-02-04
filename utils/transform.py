@@ -5,6 +5,7 @@ import torch
 from torchvision import transforms
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
+import matplotlib.pyplot as plt
 
 
 def get_trfm(type, args):
@@ -33,7 +34,7 @@ def get_trfm(type, args):
         if args.CoarseDropout:
             trfms.append(
                 A.CoarseDropout(max_holes=4, min_holes=1, max_height=224, max_width=112, min_height=20, min_width=20,
-                                p=0.75))
+                                p=0.2))
         trfms.extend([
             A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             ToTensorV2()])
@@ -145,3 +146,96 @@ class BatchTransform:
         img_aug = [transform(image=np.array(s[0]), target=s[1])['image'].unsqueeze(dim=0) for s in batch]
         img_aug = torch.cat(img_aug, dim=0)
         return img_aug
+
+
+class BatchSameTransform:
+    def __init__(self, type, args):
+        self.trfm = self.get_trfm(type, args)
+
+    def __call__(self, *args, **kwargs):
+        img_l, img_r = np.split(np.asarray(kwargs['image']), 2, axis=1)
+        imgs_aug = []
+        for img in [img_l, img_r]:
+            img_aug, _ = self.transform_one_side(img)
+            imgs_aug.append(img_aug)
+        imgs_aug = torch.cat(imgs_aug, dim=2)
+        return {'image': imgs_aug, 'target': []}
+
+    def get_trfm(self, type, args):
+        if type == 'train':
+            trfms = [A.Resize(height=224, width=224)]
+            if args.Rotate:
+                trfms.append(A.Rotate(limit=10))
+            if args.ColorJitter:
+                trfms.append(A.ColorJitter(brightness=0.5, hue=0.5, contrast=0.5))
+            if args.CoarseDropout:
+                trfms.append(
+                    A.CoarseDropout(max_holes=2, min_holes=1, max_height=224, max_width=112, min_height=20, min_width=20,
+                                    p=0.2))
+            trfms.extend([
+                A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+                ToTensorV2()])
+            return A.ReplayCompose(trfms)
+        elif type == 'val':
+            return A.ReplayCompose([
+                A.Resize(height=224, width=224),
+                A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+                ToTensorV2(),
+            ])
+
+    def transform_one_side(self, img):
+        img_aug = self.trfm(image=img)
+        return img_aug['image'], img_aug['replay']
+
+    def transform_cat_image(self, img, replay=None):
+        img_l, img_r = np.split(np.asarray(img), 2, axis=1)
+        imgs_aug = []
+        replay_data = []
+        if replay is None:
+            for img in [img_l, img_r]:
+                img_aug, data = self.transform_one_side(img)
+                imgs_aug.append(img_aug)
+                replay_data.append(data)
+            imgs_aug = torch.cat(imgs_aug, dim=2)
+            return imgs_aug, replay_data
+        else:
+            imgs_aug = []
+            for img, data in zip([img_l, img_r], replay):
+                imgs_aug.append(A.ReplayCompose.replay(data, image=img)['image'])
+            return torch.cat(imgs_aug, dim=2)
+
+    def apply(self, batch):
+        # self.visualize_batch_PIL(batch)
+        imgs_aug, replay = self.transform_cat_image(batch[0][0])
+        imgs_aug = [imgs_aug]
+        for img in batch[1:]:
+            img_aug = self.transform_cat_image(img[0], replay)
+            imgs_aug.append(img_aug)
+        imgs_aug = torch.stack(imgs_aug)
+        # self.visualize_batch_tensor(imgs_aug)
+        return imgs_aug
+
+    def visualize_batch_PIL(self, batch):
+        plt.figure(figsize=(2, 10))
+        plt.title('Original image')
+        batch_size = len(batch)
+        for i in range(batch_size):
+            img = np.asarray(batch[i][0])
+            plt.subplot(batch_size, 1, i+1)
+            plt.imshow(img)
+            plt.axis('off')
+        plt.show()
+        pass
+
+    def visualize_batch_tensor(self, batch):
+        plt.figure(figsize=(2, 10))
+        plt.title('Transformed image')
+        batch_size = batch.shape[0]
+        for i in range(batch_size):
+            img = np.asarray(batch[i, :, :, :]).transpose([1, 2, 0])
+            plt.subplot(batch_size, 1, i+1)
+            plt.imshow(img)
+            plt.axis('off')
+        plt.show()
+        pass
+

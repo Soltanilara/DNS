@@ -100,7 +100,7 @@ def gen_6_proto(landmarks):
 
 
 def str2bool(v):
-    return v.lower() in ("yes", "true", "t", "1")
+    return v.lower() in ("yes", "y", "true", "t", "1")
 
 
 def per_landmark(probs, borders, threshold, tp, fn, tn, fp):
@@ -108,6 +108,7 @@ def per_landmark(probs, borders, threshold, tp, fn, tn, fp):
     prob_pos_list = []
     prob_neg_list = []
     for i, start in enumerate(borders['start']):
+            # todo: widen window, exponential moving average
         prob_pos_start = max(0, start - 24, last_landmark_end)
         prob_pos_end = start + 15 + 9
         prob_neg_start = last_landmark_end

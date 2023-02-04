@@ -13,7 +13,7 @@ from tqdm import tqdm
 import json
 
 from utils.loader import TestLoader
-from utils.utils import get_imgId2landmarkId, gen_6_proto, plot_figure
+from utils.utils import get_imgId2landmarkId, gen_6_proto, plot_figure, per_landmark
 from utils.datasets import AvCocoDetection
 
 
@@ -138,6 +138,7 @@ if __name__ == '__main__':
 
     root_dataset = '/home/nick/dataset/dual_fisheye_indoor/PNG'
     dir_coco = 'coco/dual_fisheye/cross_test/3'
+    # dir_coco = 'coco/dual_fisheye/cross_test/6/PNG'
 
 
     if not osp.exists(model_path):
@@ -154,6 +155,7 @@ if __name__ == '__main__':
     # locations = ['Bainer2F']
     # locations = ['Ghausi2F_Lounge', 'Bainer2F']
     locations = ['EnvironmentalScience1F', 'Kemper3F', 'WestVillageStudyHall']
+    # locations = ['ASB1F']
 
     device = args.device
     channels, im_height, im_width = 3, 224, 448
@@ -216,6 +218,7 @@ if __name__ == '__main__':
                 i = 0
                 frame_prob = []
                 moving_avg_prob = []
+                tp, fn, tn, fp = 0, 0, 0, 0
                 qry_imgs = None
                 # TODO use window size between 3 and 6
                 probabilities = torch.zeros(15, requires_grad=False).cuda(device)
@@ -240,7 +243,8 @@ if __name__ == '__main__':
                         match, probabilities = MatchDetector(
                             model, qry_imgs, lm_proto, lm_eigs, probabilities, threshold, device)
                         frame_prob += [probabilities[-1].cpu().item()]
-                        moving_avg_prob += [probabilities.mean().cpu().item()]
+                        moving_avg_prob.append(probabilities.mean().cpu().item())
+                        tp, fn, tn, fp = per_landmark(moving_avg_prob, landmark_borders, threshold, tp, fn, tn, fp)
 
                         if match:
                             # print('\nUpdate to landmark ', str(landmark), ' at frame ', i)

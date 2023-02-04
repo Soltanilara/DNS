@@ -4,7 +4,7 @@ import numpy as np
 from torchvision.datasets import CocoDetection
 from torch.utils.data import DataLoader, Subset
 
-from utils.transform import BatchTransform, get_trfm
+from utils.transform import BatchSameTransform, get_trfm
 from utils.loader import TestLoader
 
 
@@ -83,12 +83,12 @@ def summarizeDataset(dataset: CocoDetection):
     return summary
 
 
-def get_dataset(root, annFile, type, args, batch_transform=False):
+def get_dataset(root, annFile, type, args, batch_transform=True):
     dataset = AvCocoDetection(
         root=root,
         annFile=annFile,
-        transform=BatchTransform(type) if batch_transform else get_trfm(type, args),
-        batch_transform=batch_transform
+        transform=BatchSameTransform(type, args) if batch_transform else get_trfm(type, args),
+        batch_transform=batch_transform if type == 'train' else False
     )
 
     print('____________________')

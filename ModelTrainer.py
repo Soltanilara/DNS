@@ -37,6 +37,8 @@ parser.add_argument('-aug_j', '--ColorJitter', default=False, type=str2bool, req
                     help='A.ColorJitter (default: False)')
 parser.add_argument('-aug_d', '--CoarseDropout', default=False, type=str2bool, required=False,
                     help='A.CoarseDropout (default: False)')
+parser.add_argument('-epoch_size', '--epoch_size', default=16, type=int, required=False,
+                    help='Number of episodes in a epoch (default: 16)')
 parser.add_argument('-epoch_pre', '--epoch_pre', default=3, type=int, required=False,
                     help='Number of epochs in pre-training (default: 3)')
 parser.add_argument('-epoch_fine', '--epoch_fine', default=30, type=int, required=False,
@@ -78,7 +80,7 @@ device = args.device if torch.cuda.is_available() else "cpu"  # use GPU if avail
 backbone = args.backbone
 n_epochs_pre = args.epoch_pre
 n_epochs_fine =args.epoch_fine
-n_episodes = 16
+n_episodes = args.epoch_size
 batch_pre = args.batch_pre
 batch_fine = args.batch_fine
 sup_size = args.sup_size
@@ -87,12 +89,12 @@ qry_num = args.qry_num
 skip_cov = args.skip_cov
 debug = args.debug
 channels, im_height, im_width = 3, 224, 224
-lr = 1e-4  # 1e-3
+lr = 1e-3
 stats_freq = 2
 sch_param_1 = 10
 sch_param_2 = 0.5
 FC_len = 1000
-course_name = 'dual_fisheye_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F_batch_3_neg_50_{}'.format(args.name)
+course_name = 'dual_fisheye_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F_{}'.format(args.name)
 savename = course_name+'_batch'+str(batch_pre)+'_' + str(sup_size)+'-shot_lr_'+str(lr)+'_lrsch_'+str(sch_param_2)+'_'+str(sch_param_1)+'_'+str(n_episodes)+'episodes'
 print(savename)
 
@@ -186,7 +188,7 @@ def ftrain(model, optimizer, dataset_train, dataset_val, sup_size, qry_size, qry
                     qry_imgs = None
                     frame_prob = []
                     tp, fn, tn, fp = 0, 0, 0, 0
-                    threshold = 0.4
+                    threshold = 0.5
                     probabilities = torch.zeros(15, requires_grad=False).cuda(device)
                     for i, img in enumerate(dataloader_test):
                         pbar.set_description_str('-- Validation: {} [{}/{}]'.format(location, i, len(dataloader_test)))
@@ -214,9 +216,9 @@ def ftrain(model, optimizer, dataset_train, dataset_val, sup_size, qry_size, qry
                     tp, fn, tn, fp = per_landmark(frame_prob, landmark_borders, threshold, tp, fn, tn, fp)
 
                     loss_val = F.binary_cross_entropy(torch.tensor(frame_prob, dtype=float), torch.tensor(gt, dtype=float))
-                    precision = tp / (tp + fp + 1e-3)
-                    recall = tp / (tp + fn + 1e-3)
-                    f1 = 2*recall*precision/(recall + precision)
+                    precision = tp/(tp+fp+1e-3)
+                    recall = tp/(tp+fn+1e-3)
+                    f1 = 2*recall*precision/(recall+precision+1e-3)
                     running_loss.append(loss_val)
                     running_f1.append(f1)
 
