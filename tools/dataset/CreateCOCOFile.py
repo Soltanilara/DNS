@@ -64,44 +64,44 @@ if __name__ == '__main__':
     # dir_output = r'/var/services/homes/SDB/Drive/Projects/AV/code/coco/coco_indoor_exclude_Bainer2F_Kemper3F'
 
     dataset_root = r'/home/nick/dataset/dual_fisheye_indoor/PNG'
-    # dir_output = r'/home/nick/projects/FSL/coco/dual_fisheye/15_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F/PNG'
-    dir_output = r'/home/nick/projects/FSL/coco/dual_fisheye/cross_test/3'
+    dir_output = r'/home/nick/projects/FSL/coco/dual_fisheye/15_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F/PNG'
+    # dir_output = r'/home/nick/projects/FSL/coco/dual_fisheye/cross_test/3'
 
     if not osp.exists(dir_output):
         os.makedirs(dir_output)
 
-    exclude_locations = [
-        'ASB1F',
-        'ASB2F',
-        'Bainer2F',
-        'EngineerngLibrary',
-        'EnvironmentalScience2F',
-        'EnvironmentalScience3F',
-        'Ghausi2F',
-        'Ghausi2F_Lounge',
-        'PhysicsBuilding',
-        'PhysicsBuilding2F',
-        'PhysicsBuildingGF',
-        'Walker',
-        'WestVillageMailbox',
-        'WestVillageOffice',
-        'WestVillageStudyRoom',
-    ]
     # exclude_locations = [
-    #     'Kemper3F', 'WestVillageStudyHall', 'EnvironmentalScience1F'
+    #     'ASB1F',
+    #     'ASB2F',
+    #     'Bainer2F',
+    #     'EngineerngLibrary',
+    #     'EnvironmentalScience2F',
+    #     'EnvironmentalScience3F',
+    #     'Ghausi2F',
+    #     'Ghausi2F_Lounge',
+    #     'PhysicsBuilding',
+    #     'PhysicsBuilding2F',
+    #     'PhysicsBuildingGF',
+    #     'Walker',
+    #     'WestVillageMailbox',
+    #     'WestVillageOffice',
+    #     'WestVillageStudyRoom',
     # ]
+    exclude_locations = [
+        'Kemper3F', 'WestVillageStudyHall', 'EnvironmentalScience1F'
+    ]
     # exclude_locations = []
 
     info = {
         'description': 'Exclude:' + str(exclude_locations),
         'directions': ['cw', 'ccw'],
-        'total_locations': 18,
-        'num_landmark': 8,
+        'total_locations': len(os.listdir(dataset_root)) - len(exclude_locations),
+        'landmark_per_lap': 8,
         'num_cats': 0
     }
 
-    for dataset_type in ['test']:
-    # for dataset_type in ['train', 'val']:
+    # for dataset_type in ['test']:
+    for dataset_type in ['train', 'val']:
         cat_id = -1
         img_id = -1
         ann_id = -1
@@ -110,17 +110,13 @@ if __name__ == '__main__':
         categories = []
         for dir_location in [i for i in glob(osp.join(dataset_root, '*')) if osp.isdir(i) and osp.basename(i) not in exclude_locations]:
             location = osp.basename(dir_location)
-            num_laps = len([i for i in glob(osp.join(dir_location, 'c*', '*')) if osp.basename(i) != '@eaDir'])
-            assert num_laps % 2 == 0, 'Odd number of laps in {}'.format(location)
-            num_pairs = int(num_laps / 2)
-            num_val = 2 if num_pairs >= 4 else 1
-            num_test = 0
-            num_train = num_pairs - num_val - num_test
             if dataset_type in ['train', 'val']:
                 for direction in ['cw', 'ccw']:
-                    dir_direction = osp.join(dataset_root, location, direction)
+                    dir_direction = osp.join(dir_location, direction)
+                    num_laps = len([i for i in glob(osp.join(dir_direction, '*')) if osp.basename(i) != '@eaDir'])
+                    num_val = 2 if num_laps >= 4 else 1
+                    num_train = num_laps - num_val
                     laps = [i for i in os.listdir(dir_direction) if osp.isdir(osp.join(dir_direction, i)) and i != '@eaDir']
-                    laps.sort()
                     if dataset_type == 'train':
                         laps_type = laps[:num_train]
                         cat_id, img_id, ann_id = generate_dict(laps_type, dir_direction, cat_id, img_id, ann_id)
@@ -128,7 +124,6 @@ if __name__ == '__main__':
                         laps_type = laps[num_train:num_train + num_val]
                         cat_id, img_id, ann_id = generate_dict(laps_type, dir_direction, cat_id, img_id, ann_id)
                     print('Creating dataset: {}, location: {}, direction: {}, num_lap: {}'.format(dataset_type, location, direction, len(laps_type)))
-
             elif dataset_type == 'test':
                 laps = {}
                 for direction in ['cw', 'ccw']:
