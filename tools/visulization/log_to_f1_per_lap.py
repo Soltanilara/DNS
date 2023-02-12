@@ -9,11 +9,16 @@ from utils.utils import per_landmark
 if __name__ == '__main__':
     dir_log = '/home/nick/projects/FSL/output/log/'
     names = [
-        'f1_base',
-        'f1_skip_cov',
-        'f1_swav',
-        'f1_swav_skip_cov',
-        'f1_scratch',
+        # 'f1_base',
+        # 'f1_skip_cov',
+        # 'f1_swav',
+        # 'f1_swav_skip_cov',
+        # 'f1_scratch',
+        'swav',
+        'swav_skip',
+        'resnet50',
+        'resnet50_skip',
+        # 'scratch',
     ]
     locations = ['WestVillageStudyHall', 'Kemper3F', 'EnvironmentalScience1F']
     threshold = 0.4

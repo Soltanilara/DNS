@@ -41,7 +41,13 @@ if __name__ == '__main__':
         # '15locations',
         # '4locations',
 
-        'epoch_34'
+        # 'epoch_34'
+
+        '15locations_pre15_swav',
+        '15locations_pre15_swav_skip_conv',
+        '15locations_pre15_resnet50',
+        '15locations_pre15_resnet50_skip_conv',
+        '15locations_pre15_scratch',
 
     ]
     for model_name in model_names:

@@ -14,6 +14,7 @@ def load_model(**kwargs):
     backbone = kwargs['backbone']
     device = kwargs['device']
     skip_cov = kwargs['skip_cov']
+    norm_dist = kwargs['norm_dist']
 
     print('Using backbone: {}'.format(backbone))
     if backbone == 'resnet50_swav':
@@ -42,36 +43,38 @@ def load_model(**kwargs):
             nn.Softplus()
         )
 
-    classifier = nn.Sequential(
-        nn.Linear(FCdim*2, FCdim*2),
-        nn.ELU(),
-        nn.Linear(FCdim*2, 100),
-        nn.ELU(),
-        nn.Linear(100, 10),
-        nn.ELU(),
-        nn.Linear(10, 1),
-        nn.Sigmoid()
-    )
-    # classifier = nn.Sequential(  # todo: 3 layers
-    #     nn.Linear(2, 50),
-    #     todo: batch norm
-    #     nn.ELU(),
-    #     nn.Linear(50, 20),
-    #     todo: batch norm
-    #     nn.ELU(),
-    #     nn.Linear(20, 1),
-    #     todo: batch norm
-    #     nn.Sigmoid()
-    # )
-
-    return StampNet(encoder, cov, classifier, device)
+    if not norm_dist:
+        classifier = nn.Sequential(
+            nn.Linear(FCdim*2, FCdim*2),
+            nn.ELU(),
+            nn.Linear(FCdim*2, 100),
+            nn.ELU(),
+            nn.Linear(100, 10),
+            nn.ELU(),
+            nn.Linear(10, 1),
+            nn.Sigmoid()
+        )
+    else:
+        classifier = nn.Sequential(
+            nn.Linear(2, 50),
+            nn.BatchNorm1d(50),
+            nn.ELU(),
+            nn.Linear(50, 20),
+            nn.BatchNorm1d(20),
+            nn.ELU(),
+            nn.Linear(20, 1),
+            nn.BatchNorm1d(1),
+            nn.Sigmoid()
+        )
+    return StampNet(encoder, cov, classifier, device, norm_dist)
 
 
 class StampNet(nn.Module):
-    def __init__(self, encoder, cov_module, classifier, device):
+    def __init__(self, encoder, cov_module, classifier, device, norm_dist=None):
         super(StampNet, self).__init__()
 
         self.device = device
+        self.norm_dist = norm_dist
         if self.device == 'cpu':
             self.encoder = encoder
             self.cov = cov_module
@@ -102,9 +105,12 @@ class StampNet(nn.Module):
             eigs_sup = torch.mean(eigs_indiv_sup, 2)
             eigs_qry = torch.mean(eigs_qry, 2)
             eigs_sup = eigs_sup.view(batch, 1, -1).expand(-1, qry_num, -1)
-            dists = (diff/(eigs_sup+eigs_qry)).view(batch*qry_num, -1) * diff.view(batch*qry_num, -1)  # todo: norm?
+            dists = (diff/(eigs_sup+eigs_qry)).view(batch*qry_num, -1) * diff.view(batch*qry_num, -1)
         else:
             dists = (diff**2).view(batch*qry_num, -1)
+
+        if self.norm_dist:
+            dists = torch.sum(dists, dim=1, keepdim=True)
 
         return dists
 

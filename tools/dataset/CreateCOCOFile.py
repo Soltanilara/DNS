@@ -36,7 +36,7 @@ def generate_dict(laps_type, dir_direction, cat_id, img_id, ann_id):
                 info['num_cats'] += 1
             path_imgs = glob(osp.join(dir_landmark, '*.png'))
             path_imgs.sort()
-            for path_img in path_imgs:
+            for path_img in path_imgs[-100:]:
                 fname = osp.basename(path_img)
                 img_id += 1
                 img = {
@@ -64,32 +64,32 @@ if __name__ == '__main__':
     # dir_output = r'/var/services/homes/SDB/Drive/Projects/AV/code/coco/coco_indoor_exclude_Bainer2F_Kemper3F'
 
     dataset_root = r'/home/nick/dataset/dual_fisheye_indoor/PNG'
-    dir_output = r'/home/nick/projects/FSL/coco/dual_fisheye/15_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F/PNG'
-    # dir_output = r'/home/nick/projects/FSL/coco/dual_fisheye/cross_test/3'
+    # dir_output = r'/home/nick/projects/FSL/coco/dual_fisheye/15_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F/PNG'
+    dir_output = r'/home/nick/projects/FSL/coco/dual_fisheye/cross_test/3'
 
     if not osp.exists(dir_output):
         os.makedirs(dir_output)
 
-    # exclude_locations = [
-    #     'ASB1F',
-    #     'ASB2F',
-    #     'Bainer2F',
-    #     'EngineerngLibrary',
-    #     'EnvironmentalScience2F',
-    #     'EnvironmentalScience3F',
-    #     'Ghausi2F',
-    #     'Ghausi2F_Lounge',
-    #     'PhysicsBuilding',
-    #     'PhysicsBuilding2F',
-    #     'PhysicsBuildingGF',
-    #     'Walker',
-    #     'WestVillageMailbox',
-    #     'WestVillageOffice',
-    #     'WestVillageStudyRoom',
-    # ]
     exclude_locations = [
-        'Kemper3F', 'WestVillageStudyHall', 'EnvironmentalScience1F'
+        'ASB1F',
+        'ASB2F',
+        'Bainer2F',
+        'EngineeringLibrary',
+        'EnvironmentalScience2F',
+        'EnvironmentalScience3F',
+        'Ghausi2F',
+        'Ghausi2F_Lounge',
+        'PhysicsBuilding',
+        'PhysicsBuilding2F',
+        'PhysicsBuildingGF',
+        'Walker',
+        'WestVillageMailbox',
+        'WestVillageOffice',
+        'WestVillageStudyRoom',
     ]
+    # exclude_locations = [
+    #     'Kemper3F', 'WestVillageStudyHall', 'EnvironmentalScience1F'
+    # ]
     # exclude_locations = []
 
     info = {
@@ -100,8 +100,8 @@ if __name__ == '__main__':
         'num_cats': 0
     }
 
-    # for dataset_type in ['test']:
-    for dataset_type in ['train', 'val']:
+    for dataset_type in ['test']:
+    # for dataset_type in ['train', 'val']:
         cat_id = -1
         img_id = -1
         ann_id = -1

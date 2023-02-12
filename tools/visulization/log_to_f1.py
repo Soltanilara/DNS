@@ -25,11 +25,34 @@ def exponential_moving_average(probs_frame, window_size, smoothing=2):
 if __name__ == '__main__':
     dir_log = '/home/nick/projects/FSL/output/log/'
     names = [
-        'f1_base',
-        'f1_skip_cov',
-        'f1_swav',
-        'f1_swav_skip_cov',
-        'f1_scratch',
+        # 'f1_base',
+        # 'f1_skip_cov',
+        # 'f1_swav',
+        # 'f1_swav_skip_cov',
+        # 'f1_scratch',
+
+        # 'swav',
+        # 'swav_skip',
+        # 'resnet50',
+        # 'resnet50_skip',
+        # # 'scratch',
+        # 'f1_scratch',
+
+        # 'swav_new',
+        # 'swav_epoch_2',
+        # 'swav_epoch_10',
+        # 'swav_epoch_18',
+        # 'swav_epoch_26',
+        # 'swav_epoch_34',
+        # 'swav_epoch_40',
+
+        'swav_no_aug_best',
+        'swav_no_aug_epoch_2',
+        'swav_no_aug_epoch_10',
+        'swav_no_aug_epoch_18',
+        'swav_no_aug_epoch_26',
+        'swav_no_aug_epoch_34',
+        'swav_no_aug_epoch_40',
     ]
     locations = ['WestVillageStudyHall', 'Kemper3F', 'EnvironmentalScience1F']
     # locations = ['WestVillageStudyHall', 'Kemper3F']
@@ -52,10 +75,9 @@ if __name__ == '__main__':
 
         precision = tp / (tp + fp + 1e-3)
         recall = tp / (tp + fn + 1e-3)
-        # f1 = 2 * recall * precision / (recall + precision)
-        # print('Model: {}, F1 = {:.3f}'.format(name, f1))
+        f1 = 2 * recall * precision / (recall + precision)
+        print('Model: {}, F1 = {:.3f}'.format(name, f1))
 
-        # todo: false positive rate
-        fpr = fp / (fp + tn)
-        print('Model: {}, FPR = {:.3f}'.format(name, fpr))
+        # fpr = fp / (fp + tn)
+        # print('Model: {}, FPR = {:.3f}'.format(name, fpr))
 

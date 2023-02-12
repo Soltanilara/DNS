@@ -7,11 +7,11 @@ import matplotlib.pyplot as plt
 
 if __name__ == '__main__':
     dir_dataset = '/home/nick/dataset/dual_fisheye_indoor/PNG'
-    # dir_output = '/home/nick/dataset/dual_fisheye_indoor/MP4'
-    dir_output = '/home/nick/projects/FSL/temp/for Mohammed'
-    # locations = ['EnvironmentalScience1F', 'Kemper3F', 'WestVillageStudyHall']
+    dir_output = '/home/nick/dataset/dual_fisheye_indoor/MP4_new'
+    # dir_output = '/home/nick/projects/FSL/temp/for Mohammed'
+    locations = ['EnvironmentalScience1F', 'Kemper3F', 'WestVillageStudyHall']
     # locations = ['EngineerngLibrary']
-    locations = ['ASB1F']
+    # locations = ['ASB1F']
 
     res = (260, 120)
     fps = 25

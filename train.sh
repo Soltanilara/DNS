@@ -59,8 +59,12 @@
 
 #python ModelTrainer.py -n 15locations_pre15_val_per_landmark_f1_swav_tr5      -device 0 -b resnet50_swav   -aug_r 1 -aug_j 1 -aug_d 1 -epoch_pre 15 -epoch_fine 40 -batch_pre 36 -batch_fine 3 -size_sup 10 -size_qry 10 -num_qry 6
 
-python ModelTrainer.py -n 15locations_pre15_swav              -device 0 -b resnet50_swav -aug_r 1 -aug_j 1 -aug_d 1 -epoch_pre 15 -epoch_fine 40 -batch_pre 36 -batch_fine 3 -size_sup 10 -size_qry 10 -num_qry 6
-python ModelTrainer.py -n 15locations_pre15_swav_skip_cov     -device 0 -b resnet50_swav -aug_r 1 -aug_j 1 -aug_d 1 -epoch_pre 15 -epoch_fine 40 -batch_pre 36 -batch_fine 3 -size_sup 10 -size_qry 10 -num_qry 6 -skip_cov 1
-python ModelTrainer.py -n 15locations_pre15_resnet50          -device 0 -b resnet50 -aug_r 1 -aug_j 1 -aug_d 1 -epoch_pre 15 -epoch_fine 40 -batch_pre 36 -batch_fine 3 -size_sup 10 -size_qry 10 -num_qry 6
-python ModelTrainer.py -n 15locations_pre15_resnet50_skip_cov -device 0 -b resnet50 -aug_r 1 -aug_j 1 -aug_d 1 -epoch_pre 15 -epoch_fine 40 -batch_pre 36 -batch_fine 3 -size_sup 10 -size_qry 10 -num_qry 6 -skip_cov 1
-python ModelTrainer.py -n 15locations_pre15_scratch           -device 0 -b scratch  -aug_r 1 -aug_j 1 -aug_d 1 -epoch_pre 0 -epoch_fine 40 -batch_pre 36 -batch_fine 3 -size_sup 10 -size_qry 10 -num_qry 6
+#python ModelTrainer.py -n 15locations_pre15_swav              -device 0 -b resnet50_swav -aug_r 1 -aug_j 1 -aug_d 1 -epoch_pre 15 -epoch_fine 40 -batch_pre 36 -batch_fine 3 -size_sup 10 -size_qry 10 -num_qry 6
+#python ModelTrainer.py -n 15locations_pre15_swav_skip_cov     -device 0 -b resnet50_swav -aug_r 1 -aug_j 1 -aug_d 1 -epoch_pre 15 -epoch_fine 40 -batch_pre 36 -batch_fine 3 -size_sup 10 -size_qry 10 -num_qry 6 -skip_cov 1
+#python ModelTrainer.py -n 15locations_pre15_resnet50          -device 0 -b resnet50 -aug_r 1 -aug_j 1 -aug_d 1 -epoch_pre 15 -epoch_fine 40 -batch_pre 36 -batch_fine 3 -size_sup 10 -size_qry 10 -num_qry 6
+#python ModelTrainer.py -n 15locations_pre15_resnet50_skip_cov -device 0 -b resnet50 -aug_r 1 -aug_j 1 -aug_d 1 -epoch_pre 15 -epoch_fine 40 -batch_pre 36 -batch_fine 3 -size_sup 10 -size_qry 10 -num_qry 6 -skip_cov 1
+#python ModelTrainer.py -n 15locations_pre15_scratch           -device 0 -b scratch  -aug_r 1 -aug_j 1 -aug_d 1 -epoch_pre 0 -epoch_fine 40 -batch_pre 36 -batch_fine 3 -size_sup 10 -size_qry 10 -num_qry 6
+
+#python ModelTrainer.py -n 15locations_pre15_swav_norm               -device 0 -b resnet50_swav -aug_r 1 -aug_j 1 -aug_d 1 -epoch_pre 15 -epoch_fine 40 -batch_pre 36 -batch_fine 3 -size_sup 10 -size_qry 10 -num_qry 6 -norm_dist 1
+
+python ModelTrainer.py -n 15locations_pre15_swav_no_aug              -device 0 -b resnet50_swav -aug 0 -epoch_pre 15 -epoch_fine 40 -batch_pre 36 -batch_fine 3 -size_sup 10 -size_qry 10 -num_qry 6

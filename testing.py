@@ -1,5 +1,6 @@
 import os
 import os.path as osp
+import random
 from time import time, sleep
 import argparse
 
@@ -13,7 +14,7 @@ from tqdm import tqdm
 import json
 
 from utils.loader import TestLoader
-from utils.utils import get_imgId2landmarkId, gen_6_proto, plot_figure, per_landmark
+from utils.utils import get_imgId2landmarkId, gen_6_proto, plot_figure, per_landmark, str2bool
 from utils.datasets import AvCocoDetection
 
 
@@ -103,6 +104,10 @@ def MatchDetector(model, image, lm_proto, lm_eigs, probabilities, threshold, dev
     if model.cov:
         qry_eigs = torch.cat([qry_eigs_l, qry_eigs_r], dim=0)
         dist = diff / (qry_eigs + lm_eigs) * diff
+        if hasattr(model, 'norm_list') and model.norm_dist:
+            norm_l = torch.sum(dist[:, :1000], dim=1, keepdim=True)
+            norm_r = torch.sum(dist[:, 1000:], dim=1, keepdim=True)
+            dist = torch.cat([norm_l, norm_r], dim=1)
     else:
         dist = diff ** 2
 
@@ -127,6 +132,8 @@ if __name__ == '__main__':
                         help='size of the support and query set')
     parser.add_argument('-p', '--path_model', type=str, required=True,
                         help='path to the model')
+    parser.add_argument('-fast', '--fast', type=str2bool, required=False, default=False,
+                        help='only one lap will be the memory lap if True')
     args = parser.parse_args()
     model_name = args.name
     model_path = args.path_model
@@ -189,7 +196,13 @@ if __name__ == '__main__':
         dir_location = osp.join(dir_coco, location)
         laps = os.listdir(dir_location)
         print('[{}/{}] Testing: {}'.format(i+1, len(locations), location))
-        for lap_landmark in laps:
+        if args.fast:
+            laps_landmark = [laps[int(len(laps)/2)]]
+            print('Choosing {} as the memory lap'.format(laps[0]))
+        else:
+            laps_landmark = laps
+
+        for lap_landmark in laps_landmark:
             for lap_test in laps:
                 if lap_test == lap_landmark:
                     continue
@@ -250,7 +263,7 @@ if __name__ == '__main__':
                             # print('\nUpdate to landmark ', str(landmark), ' at frame ', i)
                             matched[landmark] = 1
                             pbar.set_description('runs: [{}/{}], matched: [{}/{}]'.format(
-                                runs_cnt, len(laps)*(len(laps)-1), int(np.sum(matched)), len(matched)))
+                                runs_cnt, len(laps_landmark)*(len(laps)-1), int(np.sum(matched)), len(matched)))
                 landmark_total += num_landmark
                 landmark_matched += np.sum(matched)
 

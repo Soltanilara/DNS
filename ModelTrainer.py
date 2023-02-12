@@ -31,12 +31,10 @@ parser.add_argument('-device', '--device', type=int, required=False,
                     help='Device ID')
 parser.add_argument('-b', '--backbone', default='resnet50', type=str, required=False,
                     help='Model backbone')
-parser.add_argument('-aug_r', '--Rotate', default=False, type=str2bool, required=False,
-                    help='A.Rotate (default: False)')
-parser.add_argument('-aug_j', '--ColorJitter', default=False, type=str2bool, required=False,
-                    help='A.ColorJitter (default: False)')
-parser.add_argument('-aug_d', '--CoarseDropout', default=False, type=str2bool, required=False,
-                    help='A.CoarseDropout (default: False)')
+parser.add_argument('-aug', '--aug', default=True, type=str2bool, required=False,
+                    help='Whether or not apply data augmentation in training')
+parser.add_argument('-val_freq', '--val_freq', default=2, type=int, required=False,
+                    help='Validation frequency (default: 2)')
 parser.add_argument('-epoch_size', '--epoch_size', default=16, type=int, required=False,
                     help='Number of episodes in a epoch (default: 16)')
 parser.add_argument('-epoch_pre', '--epoch_pre', default=3, type=int, required=False,
@@ -55,6 +53,8 @@ parser.add_argument('-num_qry', '--qry_num', default=6, type=int, required=False
                     help='Size of the query set (default: 6)')
 parser.add_argument('-skip_cov', '--skip_cov', default=False, type=str2bool, required=False,
                     help='Whether or not to skip the cov module (default: False)')
+parser.add_argument('-norm_dist', '--norm_dist', default=False, type=str2bool, required=False,
+                    help='Whether or not to normalize the distance (default: False)')
 parser.add_argument('-debug', '--debug', default=False, type=str2bool, required=False,
                     help='Debug mode (default: False)')
 
@@ -87,16 +87,19 @@ sup_size = args.sup_size
 qry_size = args.qry_size
 qry_num = args.qry_num
 skip_cov = args.skip_cov
+norm_dist = args.norm_dist
 debug = args.debug
+stats_freq = args.val_freq
 channels, im_height, im_width = 3, 224, 224
 lr = 1e-3
-stats_freq = 2
 sch_param_1 = 10
 sch_param_2 = 0.5
 FC_len = 1000
 course_name = 'dual_fisheye_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F_{}'.format(args.name)
 savename = course_name+'_batch'+str(batch_pre)+'_' + str(sup_size)+'-shot_lr_'+str(lr)+'_lrsch_'+str(sch_param_2)+'_'+str(sch_param_1)+'_'+str(n_episodes)+'episodes'
 print(savename)
+if norm_dist:
+    print('Normalizing distance')
 
 dir_ckpt = osp.join(dir_ckpt, savename)
 dir_ckpt_all = osp.join(dir_ckpt, 'ckpt_all')
@@ -104,7 +107,8 @@ for d in [dir_ckpt_all, dir_ckpt_all]:
     if not osp.exists(d):
         os.makedirs(d)
 
-dataset_train = get_dataset(dir_dataset, osp.join(dir_coco, 'train.json'), 'train', args)
+type_train = 'train' if args.aug else 'val'
+dataset_train = get_dataset(dir_dataset, osp.join(dir_coco, 'train.json'), type_train, args)
 dataset_val = get_dataset(dir_dataset, osp.join(dir_coco, 'val.json'), 'val', args)
 
 dataloaders_val = get_dataloader_val(dataset_val)
@@ -276,7 +280,7 @@ if debug:
     model_path = '/mnt/18ee5ff4-5aaf-495c-b305-9b9698c8d053/Nick/av/ckpt/dual_fisheye_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F_batch_3_neg_50_15locations_pre15_all_batch36_10-shot_lr_0.0001_lrsch_0.5_10_16episodes/ckpt_all/dual_fisheye_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F_batch_3_neg_50_15locations_pre15_all_FineTune_NewMix_SymMah_batch3_10-shot_lr_1e-05_lrsch_0.5_10_100episodes_epoch_6.pth'
     model = torch.load(model_path, map_location='cpu').cuda(device)
 else:
-    model = load_model(FCdim=FC_len, backbone=backbone, device=device, skip_cov=skip_cov)
+    model = load_model(FCdim=FC_len, backbone=backbone, device=device, skip_cov=skip_cov, norm_dist=norm_dist)
 
 # shows the number of trainable parameters----------------------------------------------
 model_parameters = filter(lambda p: p.requires_grad, model.parameters())
