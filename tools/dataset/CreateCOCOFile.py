@@ -65,12 +65,43 @@ if __name__ == '__main__':
 
     dataset_root = r'/home/nick/dataset/dual_fisheye_indoor/PNG'
     # dir_output = r'/home/nick/projects/FSL/coco/dual_fisheye/15_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F/PNG'
-    dir_output = r'/home/nick/projects/FSL/coco/dual_fisheye/cross_test/3'
+    # dir_output = r'/home/nick/projects/FSL/coco/dual_fisheye/cross_test/3'
+    # dir_output = r'/home/nick/projects/FSL/coco/dual_fisheye/cross_test/ASB1F'
+
+    # dir_output = r'/home/nick/projects/FSL/coco/dual_fisheye/15_exclude_WestVillageStudyHall_EnvironmentalScience1F_ASB1F_PhysicsBuilding_WestVillageOffice'
+    # dir_output = r'/home/nick/projects/FSL/coco/dual_fisheye/cross_test/5'
+    # dir_output = r'/home/nick/projects/FSL/coco/dual_fisheye/cross_test/all'
+    # dir_output = r'/home/nick/projects/FSL/coco/dual_fisheye/11'
+    dir_output = r'/home/nick/projects/FSL/coco/dual_fisheye/12_3_3'
+
+    # dataset_root = '/home/nick/projects/MiniAV/landmark_model/models/landmarks'
+    # dir_output = '/home/nick/projects/MiniAV/landmark_model/models/landmarks'
+
+    unseen_locations_in_val = True
 
     if not osp.exists(dir_output):
         os.makedirs(dir_output)
 
-    exclude_locations = [
+    # exclude_locations = [
+    #     'ASB1F',
+    #     'ASB2F',
+    #     'Bainer2F',
+    #     'EngineeringLibrary',
+    #     'EnvironmentalScience2F',
+    #     'EnvironmentalScience3F',
+    #     'Ghausi2F',
+    #     'Ghausi2F_Lounge',
+    #     'PhysicsBuilding',
+    #     'PhysicsBuilding2F',
+    #     'PhysicsBuildingGF',
+    #     'Walker',
+    #     'WestVillageMailbox',
+    #     'WestVillageOffice',
+    #     'WestVillageStudyRoom',
+    # ]
+
+    # all locations
+    all_locations = [
         'ASB1F',
         'ASB2F',
         'Bainer2F',
@@ -86,11 +117,92 @@ if __name__ == '__main__':
         'WestVillageMailbox',
         'WestVillageOffice',
         'WestVillageStudyRoom',
+        'Kemper3F',
+        'WestVillageStudyHall',
+        'EnvironmentalScience1F'
     ]
     # exclude_locations = [
     #     'Kemper3F', 'WestVillageStudyHall', 'EnvironmentalScience1F'
     # ]
+    # exclude_locations = [
+    #     'WestVillageStudyHall',
+    #     'EnvironmentalScience1F',
+    #     'ASB1F',
+    #     'PhysicsBuilding',
+    #     'WestVillageOffice'
+    # ]
+    # exclude_locations = [
+    #     'ASB2F',
+    #     'Bainer2F',
+    #     'EngineeringLibrary',
+    #     'EnvironmentalScience2F',
+    #     'EnvironmentalScience3F',
+    #     'Ghausi2F',
+    #     'Ghausi2F_Lounge',
+    #     'PhysicsBuilding2F',
+    #     'PhysicsBuildingGF',
+    #     'Walker',
+    #     'WestVillageMailbox',
+    #     'WestVillageStudyRoom',
+    #     'Kemper3F',
+    # ]
+    # exclude_locations = [
+    #     'WestVillageStudyHall', #
+    #     'EnvironmentalScience1F', #
+    #     'ASB1F', #
+    #     'PhysicsBuilding', #
+    #     'WestVillageOffice', #
+    #     'EnvironmentalScience2F', #
+    #     'PhysicsBuilding2F', #
+    # ]
+    # for val
+    # exclude_locations = [
+    #     'ASB1F',
+    #     'ASB2F',
+    #     'Bainer2F',
+    #     'EngineeringLibrary',
+    #     'EnvironmentalScience3F',
+    #     'Ghausi2F',
+    #     'Ghausi2F_Lounge',
+    #     'PhysicsBuilding',
+    #     'PhysicsBuildingGF',
+    #     'Walker',
+    #     'WestVillageMailbox',
+    #     'WestVillageOffice',
+    #     'WestVillageStudyRoom',
+    #     'Kemper3F',
+    #     'WestVillageStudyHall',
+    #     'EnvironmentalScience1F'
+    # ]
+
+    # train (12)
+    # exclude_locations = [
+    #     'ASB1F',  # test
+    #     'ASB2F',  # val
+    #     'WestVillageStudyHall',  # test
+    #     'WestVillageOffice',  # val
+    #     'EnvironmentalScience1F',  # test
+    #     'EnvironmentalScience2F',  # val
+    # ]
+    # val
+    # include_locations = [
+    #     'ASB2F',  # val
+    #     'WestVillageOffice',  # val
+    #     'EnvironmentalScience2F',  # val
+    # ]
+    # test
+    include_locations = [
+        'ASB1F',  # test
+        'WestVillageStudyHall',  # test
+        'EnvironmentalScience1F',  # test
+    ]
+    exclude_locations = list(set(all_locations)-set(include_locations))
+
     # exclude_locations = []
+
+    # modes = ['train']
+    # modes = ['val']
+    modes = ['test']
 
     info = {
         'description': 'Exclude:' + str(exclude_locations),
@@ -100,8 +212,13 @@ if __name__ == '__main__':
         'num_cats': 0
     }
 
-    for dataset_type in ['test']:
+    cnt_laps = 0
+
+    # for dataset_type in ['test']:
+    # for dataset_type in ['train']:
+    # for dataset_type in ['val']:
     # for dataset_type in ['train', 'val']:
+    for dataset_type in modes:
         cat_id = -1
         img_id = -1
         ann_id = -1
@@ -114,16 +231,20 @@ if __name__ == '__main__':
                 for direction in ['cw', 'ccw']:
                     dir_direction = osp.join(dir_location, direction)
                     num_laps = len([i for i in glob(osp.join(dir_direction, '*')) if osp.basename(i) != '@eaDir'])
-                    num_val = 2 if num_laps >= 4 else 1
-                    num_train = num_laps - num_val
+                    if unseen_locations_in_val:
+                        num_train = num_laps
+                    else:
+                        num_val = 2 if num_laps >= 4 else 1
+                        num_train = num_laps - num_val
                     laps = [i for i in os.listdir(dir_direction) if osp.isdir(osp.join(dir_direction, i)) and i != '@eaDir']
                     if dataset_type == 'train':
                         laps_type = laps[:num_train]
                         cat_id, img_id, ann_id = generate_dict(laps_type, dir_direction, cat_id, img_id, ann_id)
                     elif dataset_type == 'val':
-                        laps_type = laps[num_train:num_train + num_val]
+                        laps_type = laps[num_train:num_train + num_val] if not unseen_locations_in_val else laps[-2:]
                         cat_id, img_id, ann_id = generate_dict(laps_type, dir_direction, cat_id, img_id, ann_id)
                     print('Creating dataset: {}, location: {}, direction: {}, num_lap: {}'.format(dataset_type, location, direction, len(laps_type)))
+                    cnt_laps += len(laps_type)
             elif dataset_type == 'test':
                 laps = {}
                 for direction in ['cw', 'ccw']:

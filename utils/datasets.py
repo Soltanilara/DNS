@@ -83,12 +83,15 @@ def summarizeDataset(dataset: CocoDetection):
     return summary
 
 
-def get_dataset(root, annFile, type, args, batch_transform=True):
+def get_dataset(root, annFile, type, args):
+    if args.batch_trfm:
+        print('Using batch transformation')
+
     dataset = AvCocoDetection(
         root=root,
         annFile=annFile,
-        transform=BatchSameTransform(type, args) if batch_transform else get_trfm(type, args),
-        batch_transform=batch_transform if type == 'train' else False
+        transform=BatchSameTransform(type, args) if args.batch_trfm else get_trfm(type, args),
+        batch_transform=args.batch_trfm if type == 'train' else False
     )
 
     print('____________________')

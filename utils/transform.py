@@ -1,5 +1,6 @@
 import random
 
+import cv2
 import numpy as np
 import torch
 from torchvision import transforms
@@ -26,18 +27,25 @@ def get_trfm(type, args):
     #     ])
 
     if type == 'train':
-        trfms = [A.Resize(height=224, width=448)]
-        if args.Rotate:
-            trfms.append(A.Rotate(limit=10))
-        if args.ColorJitter:
-            trfms.append(A.ColorJitter(brightness=0.5, hue=0.5, contrast=0.5))
-        if args.CoarseDropout:
-            trfms.append(
-                A.CoarseDropout(max_holes=4, min_holes=1, max_height=224, max_width=112, min_height=20, min_width=20,
-                                p=0.2))
-        trfms.extend([
-            A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-            ToTensorV2()])
+        if args.aug_light:
+            trfms = [
+                A.Resize(height=224, width=448),
+                A.Rotate(limit=5, border_mode=cv2.BORDER_CONSTANT),
+                A.ColorJitter(brightness=0.5, hue=0.2, contrast=0.5),
+                # A.CoarseDropout(max_holes=4, min_holes=1, max_height=224, max_width=112, min_height=20, min_width=20,
+                #                 p=0.2),
+                A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+                ToTensorV2()
+            ]
+        else:
+            trfms = [
+                A.Resize(height=224, width=448),
+                A.Rotate(limit=10, border_mode=cv2.BORDER_CONSTANT),
+                A.ColorJitter(brightness=0.5, hue=0.5, contrast=0.5),
+                A.CoarseDropout(max_holes=4, min_holes=1, max_height=224, max_width=112, min_height=20, min_width=20, p=0.2),
+                A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+                ToTensorV2()
+            ]
 
         return A.Compose(trfms)
         # return A.Compose([
@@ -161,20 +169,28 @@ class BatchSameTransform:
         imgs_aug = torch.cat(imgs_aug, dim=2)
         return {'image': imgs_aug, 'target': []}
 
-    def get_trfm(self, type, args):
+    def get_trfm(self, type, args=None):
         if type == 'train':
-            trfms = [A.Resize(height=224, width=224)]
-            if args.Rotate:
-                trfms.append(A.Rotate(limit=10))
-            if args.ColorJitter:
-                trfms.append(A.ColorJitter(brightness=0.5, hue=0.5, contrast=0.5))
-            if args.CoarseDropout:
-                trfms.append(
-                    A.CoarseDropout(max_holes=2, min_holes=1, max_height=224, max_width=112, min_height=20, min_width=20,
-                                    p=0.2))
-            trfms.extend([
-                A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-                ToTensorV2()])
+            if args.aug_light:
+                trfms = [
+                    A.Resize(height=224, width=224 if args.batch_trfm else 448),
+                    A.Rotate(limit=5),
+                    A.ColorJitter(brightness=0.5, hue=0.2, contrast=0.5),
+                    A.CoarseDropout(max_holes=2, min_holes=1, max_height=224, max_width=112, min_height=20,
+                                    min_width=20, p=0.2),
+                    A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+                    ToTensorV2()
+                ]
+            else:
+                trfms = [
+                    A.Resize(height=224, width=224 if args.batch_trfm else 448),
+                    A.Rotate(limit=10),
+                    A.ColorJitter(brightness=0.5, hue=0.5, contrast=0.5),
+                    A.CoarseDropout(max_holes=2, min_holes=1, max_height=224, max_width=112, min_height=20,
+                                    min_width=20, p=0.2),
+                    A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+                    ToTensorV2()
+                ]
             return A.ReplayCompose(trfms)
         elif type == 'val':
             return A.ReplayCompose([

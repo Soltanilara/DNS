@@ -33,6 +33,10 @@ parser.add_argument('-b', '--backbone', default='resnet50', type=str, required=F
                     help='Model backbone')
 parser.add_argument('-aug', '--aug', default=True, type=str2bool, required=False,
                     help='Whether or not apply data augmentation in training')
+parser.add_argument('-batch_trfm', '--batch_trfm', default=False, type=str2bool, required=False,
+                    help='Whether or not apply batch augmentation in training')
+parser.add_argument('-aug_light', '--aug_light', default=False, type=str2bool, required=False,
+                    help='Whether or not apply light data augmentation in training')
 parser.add_argument('-val_freq', '--val_freq', default=2, type=int, required=False,
                     help='Validation frequency (default: 2)')
 parser.add_argument('-epoch_size', '--epoch_size', default=16, type=int, required=False,
@@ -70,7 +74,10 @@ torch.manual_seed(0)
 
 if sys.platform == 'linux':
     dir_dataset = '/home/nick/dataset/dual_fisheye_indoor/PNG'
-    dir_coco = '/home/nick/projects/FSL/coco/dual_fisheye/15_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F/PNG'
+    # dir_coco = '/home/nick/projects/FSL/coco/dual_fisheye/15_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F/PNG'
+    # dir_coco = '/home/nick/projects/FSL/coco/dual_fisheye/15_exclude_WestVillageStudyHall_EnvironmentalScience1F_ASB1F_PhysicsBuilding_WestVillageOffice'
+    # dir_coco = '/home/nick/projects/FSL/coco/dual_fisheye/11'
+    dir_coco = '/home/nick/projects/FSL/coco/dual_fisheye/12_3_3'
     dir_output = '/home/nick/projects/FSL/output'
     dir_ckpt = '/mnt/18ee5ff4-5aaf-495c-b305-9b9698c8d053/Nick/av/ckpt'
 else:
@@ -91,11 +98,12 @@ norm_dist = args.norm_dist
 debug = args.debug
 stats_freq = args.val_freq
 channels, im_height, im_width = 3, 224, 224
-lr = 1e-3
+lr = 1e-4
 sch_param_1 = 10
 sch_param_2 = 0.5
 FC_len = 1000
-course_name = 'dual_fisheye_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F_{}'.format(args.name)
+# course_name = 'dual_fisheye_exclude_Kemper3F_WestVillageStudyHall_EnvironmentalScience1F_{}'.format(args.name)
+course_name = 'dual_fisheye_exclude_WestVillageStudyHall_EnvironmentalScience1F_ASB1F_PhysicsBuilding_WestVillageOffice_{}'.format(args.name)
 savename = course_name+'_batch'+str(batch_pre)+'_' + str(sup_size)+'-shot_lr_'+str(lr)+'_lrsch_'+str(sch_param_2)+'_'+str(sch_param_1)+'_'+str(n_episodes)+'episodes'
 print(savename)
 if norm_dist:
@@ -115,9 +123,6 @@ dataloaders_val = get_dataloader_val(dataset_val)
 
 
 # Train def-------------------------------------------------------------------------
-from tqdm import trange
-
-
 def ftrain(model, optimizer, dataset_train, dataset_val, sup_size, qry_size, qry_num, max_epoch,
            epoch_size, accuracy_stats, loss_stats, stats_freq, sch_param_1, sch_param_2, batch,
            acc_first_epoch, loss_first_epoch, mode):
@@ -173,7 +178,7 @@ def ftrain(model, optimizer, dataset_train, dataset_val, sup_size, qry_size, qry
                 #                                                                   running_acc)) #print first few batch results
         epoch += 1
         if epoch % stats_freq == 0:
-            print('Epoch {:d} -- Loss: {:.4f} Acc: {:.4f}'.format(epoch, running_loss, running_f1))
+            # print('Epoch {:d} -- Loss: {:.4f} Acc: {:.4f}'.format(epoch, running_loss, running_f1))
             # Validation--------------------------------------
             model.eval()
             with torch.no_grad():
@@ -210,7 +215,7 @@ def ftrain(model, optimizer, dataset_train, dataset_val, sup_size, qry_size, qry
                             lm_proto = proto_sup[landmark, :]
                             lm_eigs = eigs_sup[landmark, :] if eigs_sup is not None else None
                             match, probabilities = MatchDetector(
-                                model, qry_imgs, lm_proto, lm_eigs, probabilities, threshold=0.5, device=device)
+                                model, qry_imgs, lm_proto, lm_eigs, probabilities, threshold=0.5, norm_dist=norm_dist, device=device)
                             p = probabilities[-1].cpu().item()
                             # if gt[i] >= threshold and p >= threshold: tp += 1
                             # if gt[i] >= threshold and p < threshold: fn += 1
@@ -286,6 +291,8 @@ else:
 model_parameters = filter(lambda p: p.requires_grad, model.parameters())
 params = sum([np.prod(p.size()) for p in model_parameters])
 print(params)
+
+model.norm_dist = norm_dist
 
 # # shows the number of trainable parameters (alternative method)-------------------------
 # def count_parameters(model):

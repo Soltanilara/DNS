@@ -46,17 +46,96 @@ if __name__ == '__main__':
         # 'swav_epoch_34',
         # 'swav_epoch_40',
 
-        'swav_no_aug_best',
-        'swav_no_aug_epoch_2',
-        'swav_no_aug_epoch_10',
-        'swav_no_aug_epoch_18',
-        'swav_no_aug_epoch_26',
-        'swav_no_aug_epoch_34',
-        'swav_no_aug_epoch_40',
+        # 'swav_no_aug_best',
+        # 'swav_no_aug_epoch_2',
+        # 'swav_no_aug_epoch_10',
+        # 'swav_no_aug_epoch_18',
+        # 'swav_no_aug_epoch_26',
+        # 'swav_no_aug_epoch_34',
+        # 'swav_no_aug_epoch_40',
+
+        # 'swav_single_trfm_best',
+        # 'swav_single_trfm_epoch_2',
+        # 'swav_single_trfm_epoch_10',
+        # 'swav_single_trfm_epoch_18',
+        # 'swav_single_trfm_epoch_26',
+        # 'swav_single_trfm_epoch_34',
+        # 'swav_single_trfm_epoch_40',
+        #
+        # 'swav_skip_cov_single_trfm_best',
+        # 'swav_skip_cov_single_trfm_epoch_2',
+        # 'swav_skip_cov_single_trfm_epoch_10',
+        # 'swav_skip_cov_single_trfm_epoch_18',
+        # 'swav_skip_cov_single_trfm_epoch_26',
+        # 'swav_skip_cov_single_trfm_epoch_34',
+        # 'swav_skip_cov_single_trfm_epoch_40',
+        #
+        # 'swav_single_trfm_aug_light_best',
+        # 'swav_single_trfm_aug_light_epoch_2',
+        # 'swav_single_trfm_aug_light_epoch_10',
+        # 'swav_single_trfm_aug_light_epoch_18',
+        # 'swav_single_trfm_aug_light_epoch_26',
+        # 'swav_single_trfm_aug_light_epoch_34',
+        # 'swav_single_trfm_aug_light_epoch_40',
+        #
+        # '15_swav_batch_trfm_best',
+        # '15_swav_batch_trfm_epoch_2',
+        # '15_swav_batch_trfm_epoch_10',
+        # '15_swav_batch_trfm_epoch_18',
+        # '15_swav_batch_trfm_epoch_26',
+        # '15_swav_batch_trfm_epoch_34',
+        # '15_swav_batch_trfm_epoch_40',
+        #
+        # '15_swav_skip_cov_batch_trfm_best',
+        # '15_swav_skip_cov_batch_trfm_epoch_2',
+        # '15_swav_skip_cov_batch_trfm_epoch_10',
+        # '15_swav_skip_cov_batch_trfm_epoch_18',
+        # '15_swav_skip_cov_batch_trfm_epoch_26',
+        # '15_swav_skip_cov_batch_trfm_epoch_34',
+        # '15_swav_skip_cov_batch_trfm_epoch_40',
+        #
+        # '15_resnet50_batch_trfm_best',
+        # '15_resnet50_batch_trfm_epoch_2',
+        # '15_resnet50_batch_trfm_epoch_10',
+        # '15_resnet50_batch_trfm_epoch_18',
+        # '15_resnet50_batch_trfm_epoch_26',
+        # '15_resnet50_batch_trfm_epoch_34',
+        # '15_resnet50_batch_trfm_epoch_40',
+        #
+        # '15_resnet50_skip_cov_batch_trfm_best',
+        # '15_resnet50_skip_cov_batch_trfm_epoch_2',
+        # '15_resnet50_skip_cov_batch_trfm_epoch_10',
+        # '15_resnet50_skip_cov_batch_trfm_epoch_18',
+        # '15_resnet50_skip_cov_batch_trfm_epoch_26',
+        # '15_resnet50_skip_cov_batch_trfm_epoch_34',
+        # '15_resnet50_skip_cov_batch_trfm_epoch_40',
+
+        # '11_swav_batch_trfm_best',
+        # '11_swav_batch_trfm_epoch_2',
+        # '11_swav_batch_trfm_epoch_10',
+        # '11_swav_batch_trfm_epoch_18',
+        # '11_swav_batch_trfm_epoch_26',
+        # '11_swav_batch_trfm_epoch_34',
+        # '11_swav_batch_trfm_epoch_40',
+
+        '12_3_3_swav_best',
+        '12_3_3_swav_skip_cov_best',
+        '12_3_3_resnet50_best',
+        '12_3_3_resnet50_skip_cov_best',
+        '12_3_3_scratch_best',
+
+        # '12_3_3_swav_skip_cov_epoch_2',
+        # '12_3_3_swav_skip_cov_epoch_10',
+        # '12_3_3_swav_skip_cov_epoch_18',
+        # '12_3_3_swav_skip_cov_epoch_26',
+        # '12_3_3_swav_skip_cov_epoch_34',
+        # '12_3_3_swav_skip_cov_epoch_40',
     ]
-    locations = ['WestVillageStudyHall', 'Kemper3F', 'EnvironmentalScience1F']
+    # locations = ['WestVillageStudyHall', 'Kemper3F', 'EnvironmentalScience1F']
     # locations = ['WestVillageStudyHall', 'Kemper3F']
-    threshold = 0.4
+    # locations = ['WestVillageStudyHall', 'EnvironmentalScience1F', 'ASB1F', 'PhysicsBuilding', 'WestVillageOffice']
+    locations = ['ASB1F', 'WestVillageStudyHall', 'EnvironmentalScience1F']
+    threshold = 0.3
 
     for name in names:
         dir_name = osp.join(dir_log, name)

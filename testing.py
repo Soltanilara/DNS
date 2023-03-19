@@ -77,7 +77,7 @@ def encode_one_side_match(model, image, device=0):
     return qry_proto, qry_eigs
 
 
-def MatchDetector(model, image, lm_proto, lm_eigs, probabilities, threshold, device):
+def MatchDetector(model, image, lm_proto, lm_eigs, probabilities, threshold, device, norm_dist=None):
     """
     - Returns a landmark match/no match decision as "match" (boolean)
     - Updates the stored probability vector (similarities interpreted as probabilities) corresponding to the few recent
@@ -104,7 +104,7 @@ def MatchDetector(model, image, lm_proto, lm_eigs, probabilities, threshold, dev
     if model.cov:
         qry_eigs = torch.cat([qry_eigs_l, qry_eigs_r], dim=0)
         dist = diff / (qry_eigs + lm_eigs) * diff
-        if hasattr(model, 'norm_list') and model.norm_dist:
+        if hasattr(model, 'norm_dist') and model.norm_dist:
             norm_l = torch.sum(dist[:, :1000], dim=1, keepdim=True)
             norm_r = torch.sum(dist[:, 1000:], dim=1, keepdim=True)
             dist = torch.cat([norm_l, norm_r], dim=1)
@@ -122,6 +122,17 @@ def MatchDetector(model, image, lm_proto, lm_eigs, probabilities, threshold, dev
     return match, probabilities
 
 
+def get_model_path(name):
+    if 'best' in name:
+        name_prefix = name.replace('_best', '')
+        p = f'/mnt/18ee5ff4-5aaf-495c-b305-9b9698c8d053/Nick/av/ckpt/dual_fisheye_exclude_WestVillageStudyHall_EnvironmentalScience1F_ASB1F_PhysicsBuilding_WestVillageOffice_{name_prefix}_batch36_10-shot_lr_0.0001_lrsch_0.5_10_16episodes/ckpt_all/ModelMCN_dual_fisheye_exclude_WestVillageStudyHall_EnvironmentalScience1F_ASB1F_PhysicsBuilding_WestVillageOffice_{name_prefix}.pth'                                                                                                                                                                                                                                                     # ModelMCN_dual_fisheye_exclude_WestVillageStudyHall_EnvironmentalScience1F_ASB1F_PhysicsBuilding_WestVillageOffice_12_3_3_swav.pth
+    else:
+        name_prefix = '_'.join(name.split('_')[:-2])
+        epoch = name.split('_')[-1]
+        p = f'/mnt/18ee5ff4-5aaf-495c-b305-9b9698c8d053/Nick/av/ckpt/dual_fisheye_exclude_WestVillageStudyHall_EnvironmentalScience1F_ASB1F_PhysicsBuilding_WestVillageOffice_{name_prefix}_batch36_10-shot_lr_0.0001_lrsch_0.5_10_16episodes/ckpt_all/dual_fisheye_exclude_WestVillageStudyHall_EnvironmentalScience1F_ASB1F_PhysicsBuilding_WestVillageOffice_{name_prefix}_FineTune_NewMix_SymMah_batch3_10-shot_lr_1e-05_lrsch_0.5_10_100episodes_epoch_{epoch}.pth'
+    return p
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-n', '--name', type=str, required=True,
@@ -130,13 +141,13 @@ if __name__ == '__main__':
                         help='device ID')
     parser.add_argument('-s', '--size', type=int, required=False, default=10,
                         help='size of the support and query set')
-    parser.add_argument('-p', '--path_model', type=str, required=True,
+    parser.add_argument('-p', '--path_model', type=str, required=False, default=None,
                         help='path to the model')
     parser.add_argument('-fast', '--fast', type=str2bool, required=False, default=False,
                         help='only one lap will be the memory lap if True')
     args = parser.parse_args()
     model_name = args.name
-    model_path = args.path_model
+    model_path = args.path_model if args.path_model else get_model_path(model_name)
 
     ts = time()
 
@@ -144,7 +155,8 @@ if __name__ == '__main__':
     torch.manual_seed(0)
 
     root_dataset = '/home/nick/dataset/dual_fisheye_indoor/PNG'
-    dir_coco = 'coco/dual_fisheye/cross_test/3'
+    # dir_coco = 'coco/dual_fisheye/cross_test/3'
+    dir_coco = 'coco/dual_fisheye/cross_test/5'
     # dir_coco = 'coco/dual_fisheye/cross_test/6/PNG'
 
 
@@ -161,8 +173,9 @@ if __name__ == '__main__':
     # locations = ['ASB1F', 'ASB2F', 'Bainer2F', 'Ghausi2F', 'Ghausi2F_Lounge', 'Kemper3F']
     # locations = ['Bainer2F']
     # locations = ['Ghausi2F_Lounge', 'Bainer2F']
-    locations = ['EnvironmentalScience1F', 'Kemper3F', 'WestVillageStudyHall']
+    # locations = ['EnvironmentalScience1F', 'Kemper3F', 'WestVillageStudyHall']
     # locations = ['ASB1F']
+    locations = ['WestVillageStudyHall', 'EnvironmentalScience1F', 'ASB1F', 'PhysicsBuilding', 'WestVillageOffice']
 
     device = args.device
     channels, im_height, im_width = 3, 224, 448
@@ -180,6 +193,8 @@ if __name__ == '__main__':
     model.eval()
     for param in model.parameters():
         param.requires_grad = False
+    cnt_params = sum(p.numel() for p in model.parameters())
+    print(f'Number of params: {cnt_params}')
 
     # fig_frame = plt.figure(figsize=(32, 8*len(locations)/2))
     # fig_average = plt.figure(figsize=(32, 8*len(locations)/2))
