@@ -1,6 +1,6 @@
 # Instruction for Running the Code – Description-based Navigation System (DNS)
-Note: We are currently in the process of clearning up our codes and adding intructions on how to run various modules. 
-At the moment the codes include the few-shot learning aspect. In the next week or so we will add other modules for low-level maneuver control as well as data segmentation which uses the steering signal to segment the course into positive and negative classes for few-shot training.
+Note: We are currently in the process of cleaning up our codes and adding instructions on how to run various modules. 
+At the moment this repo includes the few-shot learning module. In the next week or so we will add other modules for low-level maneuver control as well as data segmentation which uses the steering signal to segment the course into positive and negative classes for few-shot training.
 
 ## Training
 
