@@ -1,0 +1,13 @@
+name: westvillagestudyhall
+project: miniav-steering
+epochs: 100
+batch_size: 64
+lr: 1e-4
+architecture: efficientnet_b0
+seed: 0
+device: cuda:0
+dataset_dir: "path/to/steering_dataset"
+train_annot_csv: "path/to/WestVillageStudyHall_steering_annot.csv"
+model_save_dir: "path/to/model_save_dir"
+resume_checkpoint: null
+start_epoch: null
