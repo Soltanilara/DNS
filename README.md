@@ -1,7 +1,7 @@
 # Description-based Navigation System (DNS)
 This repository contains the code associated with the paper "Hierarchical end-to-end autonomous navigation through few-shot waypoint detection."
 
-Note: this branch contains code and instructions for training and testing the waypoint detection model. The code and instructions for training the steering model are available at the "Steering" branch of this repository. The data used for both models can be downloaded via the link in the paper manuscript.
+Note: this branch contains code and instructions for training and testing the waypoint detection model. The code and instructions for training the steering model are available at the "[steering](https://github.com/Soltanilara/DNS/tree/Steering)" branch of this repository. The data used for both models can be downloaded via the link in the paper manuscript.
 
 ---
 
