@@ -5,6 +5,12 @@ Note: this branch contains code and instructions for training and testing the wa
 
 ---
 
+## Update: pretrained model
+
+Pretrained model can be downloaded [here](https://drive.google.com/file/d/1hjGmIkXmtw9Q_jmvPrY9sdsvf7f25bKL/view?usp=sharing).
+
+---
+
 ## Evironment setup
 
 ### Create and activate virtual environment
