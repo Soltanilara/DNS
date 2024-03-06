@@ -103,3 +103,21 @@ steering_dataset/
 ```
 
 Note: When specifying the dataset location in the config YAML, use the "path/to/steering_dataset" and specify the main dataset directory.
+
+---
+
+## Citation
+
+If you find this repository useful, please cite our paper:
+
+```bibtex
+@ARTICLE{10433735,
+  author={Ghafourian, Amin and CuiZhu, Zhongying and Shi, Debo and Chuang, Ian and Charette, Francois and Sachdeva, Rithik and Soltani, Iman},
+  journal={IEEE Robotics and Automation Letters}, 
+  title={Hierarchical End-to-End Autonomous Navigation Through Few-Shot Waypoint Detection}, 
+  year={2024},
+  volume={9},
+  number={4},
+  pages={3211-3218},
+  doi={10.1109/LRA.2024.3365294}}
+```
